@@ -19,11 +19,16 @@ const paintSelect = document.getElementById('paint-select');
 const groupsContainer = document.getElementById('material-groups');
 const status = document.getElementById('status');
 
+// Single knob for how strongly the environment (RoomEnvironment) lights surfaces.
+// Higher = brighter, more lit-from-all-sides look. ~1.0–2.0 is the useful range.
+const ENV_INTENSITY = 1.4;
+
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a1a);
@@ -38,10 +43,26 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.target.set(0, 1, 0);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x404040, 0.6));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-sun.position.set(5, 10, 7);
-scene.add(sun);
+// Studio-style rig: warm key + cool fill from opposite side + back/rim,
+// over a strong hemisphere ambient. No shadow casters — nothing goes dark.
+const hemi = new THREE.HemisphereLight(0xfff2e0, 0x8a99b3, 0.9);
+scene.add(hemi);
+
+const key = new THREE.DirectionalLight(0xfff0d8, 1.6);
+key.position.set(6, 9, 5);
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0xc8d8ff, 0.9);
+fill.position.set(-7, 5, -3);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0xffffff, 0.5);
+rim.position.set(0, 6, -8);
+scene.add(rim);
+
+const underfill = new THREE.DirectionalLight(0xfff5e8, 0.3);
+underfill.position.set(0, -4, 2);
+scene.add(underfill);
 
 const loader = new GLTFLoader();
 let currentModel = null;
@@ -67,6 +88,26 @@ function frameObject(object) {
   camera.near = size / 100;
   camera.far = size * 100;
   camera.updateProjectionMatrix();
+}
+
+// Remove every Light authored inside the gltf so only our rig is active.
+function stripLights(root) {
+  const toRemove = [];
+  root.traverse(n => { if (n.isLight) toRemove.push(n); });
+  for (const l of toRemove) l.parent?.remove(l);
+  return toRemove.length;
+}
+
+function prepareMaterial(mat) {
+  if (mat && 'envMapIntensity' in mat) mat.envMapIntensity = ENV_INTENSITY;
+}
+
+function prepareModelMaterials(root) {
+  root.traverse(n => {
+    if (!n.isMesh || !n.material) return;
+    const mats = Array.isArray(n.material) ? n.material : [n.material];
+    for (const m of mats) prepareMaterial(m);
+  });
 }
 
 function collectPaintMaterials(root, name) {
@@ -109,7 +150,10 @@ async function loadSwatchLibrary(url) {
       if (!n.isMesh || !n.material) return;
       const mats = Array.isArray(n.material) ? n.material : [n.material];
       for (const m of mats) {
-        if (m.name && !swatches.has(m.name)) swatches.set(m.name, m);
+        if (m.name && !swatches.has(m.name)) {
+          prepareMaterial(m);
+          swatches.set(m.name, m);
+        }
       }
     });
   } catch (err) {
@@ -209,6 +253,9 @@ async function loadModel(modelDef) {
   try {
     const gltf = await loader.loadAsync(modelDef.url);
     currentModel = gltf.scene;
+    const removed = stripLights(currentModel);
+    if (removed > 0) console.log(`Stripped ${removed} embedded light(s) from ${modelDef.label}.`);
+    prepareModelMaterials(currentModel);
     scene.add(currentModel);
     frameObject(currentModel);
 
