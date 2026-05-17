@@ -8,6 +8,9 @@ import {
   PAINT_MATERIAL_NAME,
   IGNORED_MATERIALS,
   MATERIAL_LABELS,
+  SWATCH_LIBRARY_URL,
+  GROUP_SWATCHES,
+  TEXTURE_SCALES,
 } from './config.js';
 
 const canvas = document.getElementById('viewport');
@@ -43,6 +46,7 @@ scene.add(sun);
 const loader = new GLTFLoader();
 let currentModel = null;
 let paintMaterials = []; // all unique material instances named MainPaint on the current model
+let swatchLibraryPromise = null; // lazy-loaded Map<name, Material>
 
 function populateSelect(select, items) {
   select.innerHTML = '';
@@ -95,16 +99,65 @@ function collectMaterialGroups(root, excludedNames) {
   return [...groups.values()];
 }
 
-// Swap options offered for each group, in addition to the default.
-// Each entry: { id, label, build: () => Material }
-const GROUP_SWAP_OPTIONS = [
-  { id: 'red', label: 'Red', build: () => new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.6 }) },
+// Load every material from the swatch library file into a Map<name, Material>.
+// Returns an empty map (and warns) if the file is missing or fails to load.
+async function loadSwatchLibrary(url) {
+  const swatches = new Map();
+  try {
+    const gltf = await loader.loadAsync(url);
+    gltf.scene.traverse(n => {
+      if (!n.isMesh || !n.material) return;
+      const mats = Array.isArray(n.material) ? n.material : [n.material];
+      for (const m of mats) {
+        if (m.name && !swatches.has(m.name)) swatches.set(m.name, m);
+      }
+    });
+  } catch (err) {
+    console.warn(`Swatch library not loaded (${url}):`, err.message);
+  }
+  return swatches;
+}
+
+// Texture map slots on standard / physical materials that should follow the group's tiling.
+const TEXTURE_MAP_KEYS = [
+  'map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap',
+  'emissiveMap', 'bumpMap', 'displacementMap', 'alphaMap',
 ];
 
-function buildGroupUI(groups) {
+// Resolve the [u, v] scale for a given group + swatch (or null swatch for the default material).
+// Falls back: per-swatch override → group default → none.
+function resolveScale(groupEntry, swatchName) {
+  if (!groupEntry) return null;
+  if (Array.isArray(groupEntry)) return groupEntry;
+  if (swatchName && groupEntry.swatches?.[swatchName]) return groupEntry.swatches[swatchName];
+  return groupEntry.group ?? null;
+}
+
+function applyTextureScale(material, scale) {
+  if (!material || scale == null) return;
+  if (!Array.isArray(scale) || scale.length < 2) {
+    console.warn('Texture scale must be [u, v]. Got:', scale);
+    return;
+  }
+  const [u, v] = scale;
+  for (const key of TEXTURE_MAP_KEYS) {
+    const tex = material[key];
+    if (!tex) continue;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(u, v);
+    tex.needsUpdate = true;
+  }
+}
+
+function buildGroupUI(groups, swatches, modelScales) {
   groupsContainer.innerHTML = '';
   for (const group of groups) {
     const displayName = MATERIAL_LABELS[group.name] ?? group.name;
+    const swatchNames = GROUP_SWATCHES[group.name] ?? [];
+    const groupScaleEntry = modelScales[group.name];
+
+    applyTextureScale(group.defaultMaterial, resolveScale(groupScaleEntry, null));
 
     const label = document.createElement('label');
     label.textContent = displayName;
@@ -115,17 +168,25 @@ function buildGroupUI(groups) {
     defaultOpt.textContent = group.name;
     select.appendChild(defaultOpt);
 
-    for (const opt of GROUP_SWAP_OPTIONS) {
+    const resolved = new Map(); // option value -> Material
+    for (const name of swatchNames) {
+      const mat = swatches.get(name);
+      if (!mat) {
+        console.warn(`Swatch "${name}" listed for group "${group.name}" but not found in library.`);
+        continue;
+      }
       const o = document.createElement('option');
-      o.value = opt.id;
-      o.textContent = opt.label;
+      o.value = name;
+      o.textContent = name;
       select.appendChild(o);
+      resolved.set(name, mat);
     }
 
     select.addEventListener('change', () => {
-      const replacement = select.value === '__default__'
-        ? group.defaultMaterial
-        : GROUP_SWAP_OPTIONS.find(o => o.id === select.value).build();
+      const isDefault = select.value === '__default__';
+      const replacement = isDefault ? group.defaultMaterial : resolved.get(select.value);
+      if (!replacement) return;
+      applyTextureScale(replacement, resolveScale(groupScaleEntry, isDefault ? null : select.value));
       for (const mesh of group.meshes) mesh.material = replacement;
     });
 
@@ -161,7 +222,10 @@ async function loadModel(modelDef) {
 
     const excluded = new Set([PAINT_MATERIAL_NAME, ...IGNORED_MATERIALS]);
     const groups = collectMaterialGroups(currentModel, excluded);
-    buildGroupUI(groups);
+    if (!swatchLibraryPromise) swatchLibraryPromise = loadSwatchLibrary(SWATCH_LIBRARY_URL);
+    const swatches = await swatchLibraryPromise;
+    const modelScales = TEXTURE_SCALES[modelDef.id] ?? {};
+    buildGroupUI(groups, swatches, modelScales);
   } catch (err) {
     status.textContent = `Failed: ${err.message}`;
     console.error(err);

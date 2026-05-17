@@ -20,3 +20,19 @@ export const IGNORED_MATERIALS = ["Shingles"];
 export const MATERIAL_LABELS = {
   RusticStone: "Stone Veneer",
 };
+
+export const SWATCH_LIBRARY_URL = "./models/swatches.glb";
+
+export const GROUP_SWATCHES = {
+  RusticStone: ["RedBrick"],
+};
+
+// can mess with material scaling here,
+// in a model, pick the default material for a group,
+// set the default group UV, and if needed, you can also
+// go into the individual swatches
+export const TEXTURE_SCALES = {
+  mvphome: {
+    RusticStone: { group: [0.2, 0.2], swatches: { RedBrick: [0.15, 0.15] } },
+  },
+};
