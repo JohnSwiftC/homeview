@@ -21,10 +21,13 @@ export const MATERIAL_LABELS = {
   RusticStone: "Stone Veneer",
 };
 
-export const SWATCH_LIBRARY_URL = "./models/swatches.glb";
-
+// For each group, list one or more .glb files. Every material found inside each
+// file becomes a swatch option for that group. Organize however you like — one
+// big file per group (e.g. "veneers.glb" containing every stone option), one
+// file per swatch, or any mix. Display name = the material's name in Blender.
+// The same file under multiple groups is fetched only once.
 export const GROUP_SWATCHES = {
-  RusticStone: ["RedBrick"],
+  RusticStone: ["./models/swatches/veneers.glb"],
 };
 
 // can mess with material scaling here,

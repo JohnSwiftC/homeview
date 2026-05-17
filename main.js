@@ -8,7 +8,6 @@ import {
   PAINT_MATERIAL_NAME,
   IGNORED_MATERIALS,
   MATERIAL_LABELS,
-  SWATCH_LIBRARY_URL,
   GROUP_SWATCHES,
   TEXTURE_SCALES,
 } from './config.js';
@@ -67,7 +66,7 @@ scene.add(underfill);
 const loader = new GLTFLoader();
 let currentModel = null;
 let paintMaterials = []; // all unique material instances named MainPaint on the current model
-let swatchLibraryPromise = null; // lazy-loaded Map<name, Material>
+const swatchFileCache = new Map(); // url -> Promise<Material[]>
 
 function populateSelect(select, items) {
   select.innerHTML = '';
@@ -140,26 +139,51 @@ function collectMaterialGroups(root, excludedNames) {
   return [...groups.values()];
 }
 
-// Load every material from the swatch library file into a Map<name, Material>.
-// Returns an empty map (and warns) if the file is missing or fails to load.
-async function loadSwatchLibrary(url) {
-  const swatches = new Map();
-  try {
-    const gltf = await loader.loadAsync(url);
-    gltf.scene.traverse(n => {
-      if (!n.isMesh || !n.material) return;
-      const mats = Array.isArray(n.material) ? n.material : [n.material];
-      for (const m of mats) {
-        if (m.name && !swatches.has(m.name)) {
-          prepareMaterial(m);
-          swatches.set(m.name, m);
+// Load one .glb and return every unique material inside it (insertion order).
+// Cached per URL so the same file shared across groups is fetched once.
+function loadSwatchFile(url) {
+  if (swatchFileCache.has(url)) return swatchFileCache.get(url);
+  const promise = (async () => {
+    try {
+      const gltf = await loader.loadAsync(url);
+      const seen = new Set();
+      const mats = [];
+      gltf.scene.traverse(n => {
+        if (!n.isMesh || !n.material) return;
+        const arr = Array.isArray(n.material) ? n.material : [n.material];
+        for (const m of arr) {
+          if (m.name && !seen.has(m.name)) {
+            prepareMaterial(m);
+            seen.add(m.name);
+            mats.push(m);
+          }
         }
+      });
+      return mats;
+    } catch (err) {
+      console.warn(`Swatch file not loaded (${url}):`, err.message);
+      return [];
+    }
+  })();
+  swatchFileCache.set(url, promise);
+  return promise;
+}
+
+// Build groupName -> Map<materialName, Material> by loading each group's listed files.
+async function loadSwatchesForGroups(groups) {
+  const result = new Map();
+  await Promise.all(groups.map(async group => {
+    const urls = GROUP_SWATCHES[group.name] ?? [];
+    const perGroup = new Map();
+    const fileLists = await Promise.all(urls.map(loadSwatchFile));
+    for (const list of fileLists) {
+      for (const mat of list) {
+        if (!perGroup.has(mat.name)) perGroup.set(mat.name, mat);
       }
-    });
-  } catch (err) {
-    console.warn(`Swatch library not loaded (${url}):`, err.message);
-  }
-  return swatches;
+    }
+    result.set(group.name, perGroup);
+  }));
+  return result;
 }
 
 // Texture map slots on standard / physical materials that should follow the group's tiling.
@@ -194,11 +218,11 @@ function applyTextureScale(material, scale) {
   }
 }
 
-function buildGroupUI(groups, swatches, modelScales) {
+function buildGroupUI(groups, swatchesByGroup, modelScales) {
   groupsContainer.innerHTML = '';
   for (const group of groups) {
     const displayName = MATERIAL_LABELS[group.name] ?? group.name;
-    const swatchNames = GROUP_SWATCHES[group.name] ?? [];
+    const swatchMap = swatchesByGroup.get(group.name) ?? new Map();
     const groupScaleEntry = modelScales[group.name];
 
     applyTextureScale(group.defaultMaterial, resolveScale(groupScaleEntry, null));
@@ -213,12 +237,7 @@ function buildGroupUI(groups, swatches, modelScales) {
     select.appendChild(defaultOpt);
 
     const resolved = new Map(); // option value -> Material
-    for (const name of swatchNames) {
-      const mat = swatches.get(name);
-      if (!mat) {
-        console.warn(`Swatch "${name}" listed for group "${group.name}" but not found in library.`);
-        continue;
-      }
+    for (const [name, mat] of swatchMap) {
       const o = document.createElement('option');
       o.value = name;
       o.textContent = name;
@@ -269,10 +288,9 @@ async function loadModel(modelDef) {
 
     const excluded = new Set([PAINT_MATERIAL_NAME, ...IGNORED_MATERIALS]);
     const groups = collectMaterialGroups(currentModel, excluded);
-    if (!swatchLibraryPromise) swatchLibraryPromise = loadSwatchLibrary(SWATCH_LIBRARY_URL);
-    const swatches = await swatchLibraryPromise;
+    const swatchesByGroup = await loadSwatchesForGroups(groups);
     const modelScales = TEXTURE_SCALES[modelDef.id] ?? {};
-    buildGroupUI(groups, swatches, modelScales);
+    buildGroupUI(groups, swatchesByGroup, modelScales);
   } catch (err) {
     status.textContent = `Failed: ${err.message}`;
     console.error(err);
