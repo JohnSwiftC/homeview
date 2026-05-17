@@ -2,7 +2,7 @@
 
 A three.js pipeline for rendering and visualizing home designs in proprty developments.
 
-## Usecase and Motivation
+## Use-Case and Motivation
 
 View Homes does not currently have a fast, cheap, and reliable way for realtors and home designers to visualize home color-schemes / designs outside of manual modelling work.
 
@@ -20,7 +20,7 @@ The pipeline itself loads _swatches_, an exported GLB containing materials used 
 
 The main configuration file exposes different settings for matching models and their respective materials.
 
-## Modelling and Materials
+## Modeling and Materials
 
 Homeview parses every material used in a model and creates a category of objects based off of it. These groups can be configured to either be ignored or used in the particular model.
 
