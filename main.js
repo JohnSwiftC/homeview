@@ -2,11 +2,18 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { MODELS, PAINT_COLORS, PAINT_MATERIAL_NAME } from './config.js';
+import {
+  MODELS,
+  PAINT_COLORS,
+  PAINT_MATERIAL_NAME,
+  IGNORED_MATERIALS,
+  MATERIAL_LABELS,
+} from './config.js';
 
 const canvas = document.getElementById('viewport');
 const modelSelect = document.getElementById('model-select');
 const paintSelect = document.getElementById('paint-select');
+const groupsContainer = document.getElementById('material-groups');
 const status = document.getElementById('status');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -70,6 +77,63 @@ function collectPaintMaterials(root, name) {
   return [...seen];
 }
 
+// Group all meshes by the name of their material, skipping any names in `excludedNames`.
+// Returns [{ name, defaultMaterial, meshes: [...] }, ...]
+function collectMaterialGroups(root, excludedNames) {
+  const groups = new Map();
+  root.traverse(n => {
+    if (!n.isMesh || !n.material || Array.isArray(n.material)) return;
+    const m = n.material;
+    if (!m.name || excludedNames.has(m.name)) return;
+    let g = groups.get(m.name);
+    if (!g) {
+      g = { name: m.name, defaultMaterial: m, meshes: [] };
+      groups.set(m.name, g);
+    }
+    g.meshes.push(n);
+  });
+  return [...groups.values()];
+}
+
+// Swap options offered for each group, in addition to the default.
+// Each entry: { id, label, build: () => Material }
+const GROUP_SWAP_OPTIONS = [
+  { id: 'red', label: 'Red', build: () => new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.6 }) },
+];
+
+function buildGroupUI(groups) {
+  groupsContainer.innerHTML = '';
+  for (const group of groups) {
+    const displayName = MATERIAL_LABELS[group.name] ?? group.name;
+
+    const label = document.createElement('label');
+    label.textContent = displayName;
+    const select = document.createElement('select');
+
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '__default__';
+    defaultOpt.textContent = displayName;
+    select.appendChild(defaultOpt);
+
+    for (const opt of GROUP_SWAP_OPTIONS) {
+      const o = document.createElement('option');
+      o.value = opt.id;
+      o.textContent = opt.label;
+      select.appendChild(o);
+    }
+
+    select.addEventListener('change', () => {
+      const replacement = select.value === '__default__'
+        ? group.defaultMaterial
+        : GROUP_SWAP_OPTIONS.find(o => o.id === select.value).build();
+      for (const mesh of group.meshes) mesh.material = replacement;
+    });
+
+    label.appendChild(select);
+    groupsContainer.appendChild(label);
+  }
+}
+
 async function loadModel(modelDef) {
   status.textContent = `Loading ${modelDef.label}…`;
   if (currentModel) {
@@ -79,6 +143,7 @@ async function loadModel(modelDef) {
     });
     currentModel = null;
     paintMaterials = [];
+    groupsContainer.innerHTML = '';
   }
   try {
     const gltf = await loader.loadAsync(modelDef.url);
@@ -93,6 +158,10 @@ async function loadModel(modelDef) {
       status.textContent = `Loaded ${modelDef.label}`;
       applyPaintColor(PAINT_COLORS.find(c => c.id === paintSelect.value));
     }
+
+    const excluded = new Set([PAINT_MATERIAL_NAME, ...IGNORED_MATERIALS]);
+    const groups = collectMaterialGroups(currentModel, excluded);
+    buildGroupUI(groups);
   } catch (err) {
     status.textContent = `Failed: ${err.message}`;
     console.error(err);
