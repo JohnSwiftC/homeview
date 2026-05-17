@@ -112,7 +112,7 @@ function buildGroupUI(groups) {
 
     const defaultOpt = document.createElement('option');
     defaultOpt.value = '__default__';
-    defaultOpt.textContent = displayName;
+    defaultOpt.textContent = group.name;
     select.appendChild(defaultOpt);
 
     for (const opt of GROUP_SWAP_OPTIONS) {
