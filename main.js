@@ -14,10 +14,127 @@ import {
 
 const canvas = document.getElementById("viewport");
 const modelSelect = document.getElementById("model-select");
-const paintSelect = document.getElementById("paint-select");
 const groupsContainer = document.getElementById("material-groups");
+const paintContainer = document.getElementById("paint-container");
 const copyLinkBtn = document.getElementById("copy-link");
 const status = document.getElementById("status");
+
+// --- Full-screen modal selector: compact trigger button opens a labeled tile grid. ---
+let activeModal = null;
+function closeActiveModal() {
+  if (activeModal) {
+    activeModal.classList.add("hidden");
+    activeModal = null;
+  }
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeActiveModal();
+});
+
+// items: [{ value, label }]; previewFor(item, size) -> HTMLElement (fresh each call)
+function createSelector({ key, label, items, initialValue, onChange, previewFor }) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "selector";
+  wrapper.dataset.stateKey = key;
+
+  if (label) {
+    const labelEl = document.createElement("div");
+    labelEl.className = "selector-label";
+    labelEl.textContent = label;
+    wrapper.appendChild(labelEl);
+  }
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "selector-trigger";
+  const triggerPreview = document.createElement("span");
+  triggerPreview.className = "selector-preview";
+  const triggerText = document.createElement("span");
+  triggerText.className = "selector-text";
+  trigger.appendChild(triggerPreview);
+  trigger.appendChild(triggerText);
+  wrapper.appendChild(trigger);
+
+  // Modal lives inside the wrapper but uses position:fixed to cover the viewport.
+  // Living inside means it's cleaned up automatically when the wrapper is removed.
+  const modal = document.createElement("div");
+  modal.className = "modal hidden";
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  const panel = document.createElement("div");
+  panel.className = "modal-panel";
+  const header = document.createElement("div");
+  header.className = "modal-header";
+  const title = document.createElement("h2");
+  title.className = "modal-title";
+  title.textContent = label ?? "";
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "modal-close";
+  closeBtn.setAttribute("aria-label", "Close");
+  closeBtn.textContent = "×";
+  const grid = document.createElement("div");
+  grid.className = "modal-grid";
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+  panel.appendChild(header);
+  panel.appendChild(grid);
+  modal.appendChild(backdrop);
+  modal.appendChild(panel);
+  wrapper.appendChild(modal);
+
+  backdrop.addEventListener("click", closeActiveModal);
+  closeBtn.addEventListener("click", closeActiveModal);
+
+  const tilesByValue = new Map();
+  for (const item of items) {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "tile";
+    tile.dataset.value = item.value;
+
+    const previewBox = document.createElement("div");
+    previewBox.className = "tile-preview";
+    previewBox.appendChild(previewFor(item, 256));
+
+    const tileLabel = document.createElement("div");
+    tileLabel.className = "tile-label";
+    tileLabel.textContent = item.label;
+
+    tile.appendChild(previewBox);
+    tile.appendChild(tileLabel);
+    tile.addEventListener("click", () => {
+      setValue(item.value, true);
+      closeActiveModal();
+    });
+    grid.appendChild(tile);
+    tilesByValue.set(item.value, tile);
+  }
+
+  function setValue(value, fire = false) {
+    const item = items.find((i) => i.value === value) ?? items[0];
+    if (!item) return;
+    wrapper.dataset.value = item.value;
+    triggerPreview.innerHTML = "";
+    triggerPreview.appendChild(previewFor(item, 24));
+    triggerText.textContent = item.label;
+    for (const [v, tile] of tilesByValue) tile.classList.toggle("active", v === item.value);
+    if (fire) onChange(item.value, item);
+  }
+
+  trigger.addEventListener("click", () => {
+    if (modal.classList.contains("hidden")) {
+      closeActiveModal();
+      modal.classList.remove("hidden");
+      activeModal = modal;
+    } else {
+      closeActiveModal();
+    }
+  });
+
+  setValue(initialValue, false);
+  return { element: wrapper, setValue, getValue: () => wrapper.dataset.value };
+}
 
 // Single knob for how strongly the environment (RoomEnvironment) lights surfaces.
 // Higher = brighter, more lit-from-all-sides look. ~1.0–2.0 is the useful range.
@@ -238,6 +355,35 @@ function applyTextureScale(material, scale) {
   }
 }
 
+// Draw a small preview of `material` (basecolor texture if present, else solid color).
+function makeMaterialPreview(material, size = 44) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  const img = material?.map?.image;
+  if (img && (img.width || img.naturalWidth)) {
+    try {
+      ctx.drawImage(img, 0, 0, size, size);
+      return canvas;
+    } catch {
+      /* fall through to color fill */
+    }
+  }
+  const c = material?.color
+    ? material.color.clone().convertLinearToSRGB()
+    : new THREE.Color(0x888888);
+  ctx.fillStyle = `rgb(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)})`;
+  ctx.fillRect(0, 0, size, size);
+  return canvas;
+}
+
+function makeColorPreview(hex) {
+  const div = document.createElement("div");
+  div.style.background = `#${hex.toString(16).padStart(6, "0")}`;
+  return div;
+}
+
 function buildGroupUI(groups, swatchesByGroup, modelScales) {
   groupsContainer.innerHTML = "";
   for (const group of groups) {
@@ -250,41 +396,27 @@ function buildGroupUI(groups, swatchesByGroup, modelScales) {
       resolveScale(groupScaleEntry, null),
     );
 
-    const label = document.createElement("label");
-    label.textContent = displayName;
-    const select = document.createElement("select");
-    select.dataset.group = group.name;
+    const items = [
+      { value: "__default__", label: group.name, material: group.defaultMaterial },
+      ...[...swatchMap].map(([name, mat]) => ({ value: name, label: name, material: mat })),
+    ];
 
-    const defaultOpt = document.createElement("option");
-    defaultOpt.value = "__default__";
-    defaultOpt.textContent = group.name;
-    select.appendChild(defaultOpt);
-
-    const resolved = new Map(); // option value -> Material
-    for (const [name, mat] of swatchMap) {
-      const o = document.createElement("option");
-      o.value = name;
-      o.textContent = name;
-      select.appendChild(o);
-      resolved.set(name, mat);
-    }
-
-    select.addEventListener("change", () => {
-      const isDefault = select.value === "__default__";
-      const replacement = isDefault
-        ? group.defaultMaterial
-        : resolved.get(select.value);
-      if (!replacement) return;
-      applyTextureScale(
-        replacement,
-        resolveScale(groupScaleEntry, isDefault ? null : select.value),
-      );
-      for (const mesh of group.meshes) mesh.material = replacement;
-      updateUrlFromState();
+    const selector = createSelector({
+      key: group.name,
+      label: displayName,
+      items,
+      initialValue: "__default__",
+      previewFor: (item, size) => makeMaterialPreview(item.material, size),
+      onChange: (value, item) => {
+        applyTextureScale(
+          item.material,
+          resolveScale(groupScaleEntry, value === "__default__" ? null : value),
+        );
+        for (const mesh of group.meshes) mesh.material = item.material;
+        updateUrlFromState();
+      },
     });
-
-    label.appendChild(select);
-    groupsContainer.appendChild(label);
+    groupsContainer.appendChild(selector.element);
   }
 }
 
@@ -316,7 +448,7 @@ async function loadModel(modelDef) {
       status.textContent = `Loaded ${modelDef.label}, but no material named "${PAINT_MATERIAL_NAME}" was found.`;
     } else {
       status.textContent = `Loaded ${modelDef.label}`;
-      applyPaintColor(PAINT_COLORS.find((c) => c.id === paintSelect.value));
+      applyPaintColor(PAINT_COLORS.find((c) => c.id === paintSelector.getValue()));
     }
 
     const excluded = new Set([PAINT_MATERIAL_NAME, ...IGNORED_MATERIALS]);
@@ -351,10 +483,9 @@ let appliedInitialGroupParams = false;
 function updateUrlFromState() {
   const params = new URLSearchParams();
   if (modelSelect.value) params.set("model", modelSelect.value);
-  if (paintSelect.value) params.set("paint", paintSelect.value);
-  for (const sel of groupsContainer.querySelectorAll("select[data-group]")) {
-    if (sel.value && sel.value !== "__default__")
-      params.set(sel.dataset.group, sel.value);
+  for (const sel of document.querySelectorAll(".selector[data-state-key]")) {
+    const val = sel.dataset.value;
+    if (val && val !== "__default__") params.set(sel.dataset.stateKey, val);
   }
   const qs = params.toString();
   history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
@@ -365,33 +496,42 @@ function applyInitialGroupParams() {
   for (const [key, value] of params) {
     if (key === "model" || key === "paint") continue;
     const sel = groupsContainer.querySelector(
-      `select[data-group="${CSS.escape(key)}"]`,
+      `.selector[data-state-key="${CSS.escape(key)}"]`,
     );
-    if (!sel || ![...sel.options].some((o) => o.value === value)) continue;
-    sel.value = value;
-    sel.dispatchEvent(new Event("change"));
+    if (!sel) continue;
+    const tile = sel.querySelector(`.modal-grid .tile[data-value="${CSS.escape(value)}"]`);
+    if (tile) tile.click();
   }
 }
 
 populateSelect(modelSelect, MODELS);
-populateSelect(paintSelect, PAINT_COLORS);
 
 const initialParams = new URLSearchParams(window.location.search);
 const initialPaintId = initialParams.get("paint");
-if (initialPaintId && PAINT_COLORS.some((c) => c.id === initialPaintId)) {
-  paintSelect.value = initialPaintId;
-}
+const startingPaintId =
+  initialPaintId && PAINT_COLORS.some((c) => c.id === initialPaintId)
+    ? initialPaintId
+    : PAINT_COLORS[0]?.id;
 const initialModelId = initialParams.get("model");
 const startModel = MODELS.find((m) => m.id === initialModelId) ?? MODELS[0];
+
+const paintSelector = createSelector({
+  key: "paint",
+  label: "Paint Color",
+  items: PAINT_COLORS.map((c) => ({ value: c.id, label: c.label, hex: c.hex })),
+  initialValue: startingPaintId,
+  previewFor: (item) => makeColorPreview(item.hex),
+  onChange: (value) => {
+    const def = PAINT_COLORS.find((c) => c.id === value);
+    if (def) applyPaintColor(def);
+    updateUrlFromState();
+  },
+});
+paintContainer.appendChild(paintSelector.element);
 
 modelSelect.addEventListener("change", () => {
   const def = MODELS.find((m) => m.id === modelSelect.value);
   if (def) loadModel(def);
-});
-paintSelect.addEventListener("change", () => {
-  const def = PAINT_COLORS.find((c) => c.id === paintSelect.value);
-  if (def) applyPaintColor(def);
-  updateUrlFromState();
 });
 
 copyLinkBtn.addEventListener("click", async () => {
