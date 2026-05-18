@@ -192,8 +192,7 @@ const TEXTURE_MAP_KEYS = [
   'emissiveMap', 'bumpMap', 'displacementMap', 'alphaMap',
 ];
 
-// Resolve the [u, v] scale for a given group + swatch (or null swatch for the default material).
-// Falls back: per-swatch override → group default → none.
+/
 function resolveScale(groupEntry, swatchName) {
   if (!groupEntry) return null;
   if (Array.isArray(groupEntry)) return groupEntry;
@@ -230,6 +229,7 @@ function buildGroupUI(groups, swatchesByGroup, modelScales) {
     const label = document.createElement('label');
     label.textContent = displayName;
     const select = document.createElement('select');
+    select.dataset.group = group.name;
 
     const defaultOpt = document.createElement('option');
     defaultOpt.value = '__default__';
@@ -251,6 +251,7 @@ function buildGroupUI(groups, swatchesByGroup, modelScales) {
       if (!replacement) return;
       applyTextureScale(replacement, resolveScale(groupScaleEntry, isDefault ? null : select.value));
       for (const mesh of group.meshes) mesh.material = replacement;
+      updateUrlFromState();
     });
 
     label.appendChild(select);
@@ -291,6 +292,12 @@ async function loadModel(modelDef) {
     const swatchesByGroup = await loadSwatchesForGroups(groups);
     const modelScales = TEXTURE_SCALES[modelDef.id] ?? {};
     buildGroupUI(groups, swatchesByGroup, modelScales);
+
+    if (!appliedInitialGroupParams) {
+      appliedInitialGroupParams = true;
+      applyInitialGroupParams();
+    }
+    updateUrlFromState();
   } catch (err) {
     status.textContent = `Failed: ${err.message}`;
     console.error(err);
@@ -307,8 +314,41 @@ function applyPaintColor(colorDef) {
   }
 }
 
+
+let appliedInitialGroupParams = false;
+
+function updateUrlFromState() {
+  const params = new URLSearchParams();
+  if (modelSelect.value) params.set('model', modelSelect.value);
+  if (paintSelect.value) params.set('paint', paintSelect.value);
+  for (const sel of groupsContainer.querySelectorAll('select[data-group]')) {
+    if (sel.value && sel.value !== '__default__') params.set(sel.dataset.group, sel.value);
+  }
+  const qs = params.toString();
+  history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+}
+
+function applyInitialGroupParams() {
+  const params = new URLSearchParams(window.location.search);
+  for (const [key, value] of params) {
+    if (key === 'model' || key === 'paint') continue;
+    const sel = groupsContainer.querySelector(`select[data-group="${CSS.escape(key)}"]`);
+    if (!sel || ![...sel.options].some(o => o.value === value)) continue;
+    sel.value = value;
+    sel.dispatchEvent(new Event('change'));
+  }
+}
+
 populateSelect(modelSelect, MODELS);
 populateSelect(paintSelect, PAINT_COLORS);
+
+const initialParams = new URLSearchParams(window.location.search);
+const initialPaintId = initialParams.get('paint');
+if (initialPaintId && PAINT_COLORS.some(c => c.id === initialPaintId)) {
+  paintSelect.value = initialPaintId;
+}
+const initialModelId = initialParams.get('model');
+const startModel = MODELS.find(m => m.id === initialModelId) ?? MODELS[0];
 
 modelSelect.addEventListener('change', () => {
   const def = MODELS.find(m => m.id === modelSelect.value);
@@ -317,10 +357,15 @@ modelSelect.addEventListener('change', () => {
 paintSelect.addEventListener('change', () => {
   const def = PAINT_COLORS.find(c => c.id === paintSelect.value);
   if (def) applyPaintColor(def);
+  updateUrlFromState();
 });
 
-if (MODELS.length > 0) loadModel(MODELS[0]);
-else status.textContent = 'No models configured. Add entries to config.js.';
+if (startModel) {
+  modelSelect.value = startModel.id;
+  loadModel(startModel);
+} else {
+  status.textContent = 'No models configured. Add entries to config.js.';
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
