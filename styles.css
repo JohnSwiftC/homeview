@@ -42,6 +42,18 @@ html, body {
   border-radius: 4px;
 }
 
+#ui button {
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #444;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+#ui button:hover { background: #353535; }
+#ui button:active { background: #1f1f1f; }
+
 #status {
   font-size: 11px;
   color: #888;

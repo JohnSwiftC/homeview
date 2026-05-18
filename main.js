@@ -16,6 +16,7 @@ const canvas = document.getElementById("viewport");
 const modelSelect = document.getElementById("model-select");
 const paintSelect = document.getElementById("paint-select");
 const groupsContainer = document.getElementById("material-groups");
+const copyLinkBtn = document.getElementById("copy-link");
 const status = document.getElementById("status");
 
 // Single knob for how strongly the environment (RoomEnvironment) lights surfaces.
@@ -391,6 +392,17 @@ paintSelect.addEventListener("change", () => {
   const def = PAINT_COLORS.find((c) => c.id === paintSelect.value);
   if (def) applyPaintColor(def);
   updateUrlFromState();
+});
+
+copyLinkBtn.addEventListener("click", async () => {
+  const original = copyLinkBtn.textContent;
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    copyLinkBtn.textContent = "Copied!";
+  } catch {
+    copyLinkBtn.textContent = "Copy failed";
+  }
+  setTimeout(() => { copyLinkBtn.textContent = original; }, 1500);
 });
 
 if (startModel) {
