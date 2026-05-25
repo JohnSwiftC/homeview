@@ -224,3 +224,40 @@ body.viewer-active {
   color: #888;
   min-height: 14px;
 }
+
+/* On phones the desktop grid (minmax 220px) collapses to a single column, so
+   each tile's aspect-ratio:1 preview balloons to the full content width — paint
+   becomes a stack of huge color blocks and material textures get upscaled and
+   look stretched. Switch to small multi-column swatches and trim the generous
+   desktop padding so the modal fits the screen. */
+@media (max-width: 600px) {
+  #ui {
+    top: 8px;
+    left: 8px;
+    padding: 10px 12px;
+    min-width: 0;
+    max-width: calc(100vw - 16px);
+  }
+
+  .modal-panel {
+    padding: 16px;
+  }
+  .modal-header {
+    margin-bottom: 14px;
+  }
+  .modal-title {
+    font-size: 18px;
+  }
+  .modal-close {
+    font-size: 28px;
+    padding: 4px 10px;
+  }
+  .modal-grid {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 10px;
+  }
+  .tile-label {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}
