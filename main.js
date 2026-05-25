@@ -18,6 +18,26 @@ const groupsContainer = document.getElementById("material-groups");
 const paintContainer = document.getElementById("paint-container");
 const copyLinkBtn = document.getElementById("copy-link");
 const status = document.getElementById("status");
+const loadingOverlay = document.getElementById("loading-overlay");
+const loadingMessage = document.getElementById("loading-message");
+
+// Full-screen loading overlay. Kept visible until the model AND all of its
+// material swatches are ready, so the model is never shown half-loaded.
+function showLoading(message) {
+  loadingMessage.textContent = message;
+  loadingOverlay.classList.remove("hidden", "error");
+}
+function setLoadingMessage(message) {
+  loadingMessage.textContent = message;
+}
+function hideLoading() {
+  loadingOverlay.classList.add("hidden");
+}
+function showLoadingError(message) {
+  loadingMessage.textContent = message;
+  loadingOverlay.classList.remove("hidden");
+  loadingOverlay.classList.add("error");
+}
 
 // --- Full-screen modal selector: compact trigger button opens a labeled tile grid. ---
 let activeModal = null;
@@ -429,6 +449,7 @@ function buildGroupUI(groups, swatchesByGroup, modelScales) {
 }
 
 async function loadModel(modelDef) {
+  showLoading(`Loading ${modelDef.label}…`);
   status.textContent = `Loading ${modelDef.label}…`;
   if (currentModel) {
     scene.remove(currentModel);
@@ -459,6 +480,10 @@ async function loadModel(modelDef) {
       applyPaintColor(PAINT_COLORS.find((c) => c.id === paintSelector.getValue()));
     }
 
+    // Material swatches (stone veneer, etc.) load separately and can take a
+    // while. Finish them before dismissing the overlay so the model isn't
+    // revealed with its swatch options still missing.
+    setLoadingMessage("Loading materials…");
     const excluded = new Set([PAINT_MATERIAL_NAME, ...IGNORED_MATERIALS]);
     const groups = collectMaterialGroups(currentModel, excluded);
     const swatchesByGroup = await loadSwatchesForGroups(groups);
@@ -470,8 +495,10 @@ async function loadModel(modelDef) {
       applyInitialGroupParams();
     }
     updateUrlFromState();
+    hideLoading();
   } catch (err) {
     status.textContent = `Failed: ${err.message}`;
+    showLoadingError(`Failed to load: ${err.message}`);
     console.error(err);
   }
 }
