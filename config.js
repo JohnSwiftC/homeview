@@ -4,12 +4,25 @@ export const MODELS = [
 
 export const PAINT_MATERIAL_NAME = "MainPaint";
 export const PAINT_COLORS = [
-  { id: "linen", label: "Linen", hex: 0xf2ede2 },
-  { id: "sage", label: "Sage", hex: 0x8a9a7b },
-  { id: "clay", label: "Clay", hex: 0xb87654 },
-  { id: "navy", label: "Navy", hex: 0x2b3a55 },
-  { id: "charcoal", label: "Charcoal", hex: 0x3a3a3a },
-  { id: "butter", label: "Butter", hex: 0xefd9a1 },
+  { id: "arctic_white", label: "Arctic White", hex: 0xe0e0d8 },
+  { id: "cobble_stone", label: "Cobble Stone", hex: 0xc6beb0 },
+  { id: "navajo_beige", label: "Navajo Beige", hex: 0xd5c9b2 },
+  { id: "khaki_brown", label: "Khaki Brown", hex: 0xa28f7d },
+  { id: "monterey_taupe", label: "Monterey Taupe", hex: 0xa19a8b },
+  { id: "timber_bark", label: "Timber Bark", hex: 0x7b7064 },
+  { id: "rich_espresso", label: "Rich Espresso", hex: 0x5f5a55 },
+  { id: "mountain_sage", label: "Mountain Sage", hex: 0x706f5e },
+  { id: "light_mist", label: "Light Mist", hex: 0xb6bab5 },
+  { id: "pearl_gray", label: "Pearl Gray", hex: 0xb2aea9 },
+  { id: "gray_slate", label: "Gray Slate", hex: 0x898a87 },
+  { id: "boothbay_blue", label: "Boothbay Blue", hex: 0x778184 },
+  { id: "evening_blue", label: "Evening Blue", hex: 0x5f696d },
+  { id: "deep_ocean", label: "Deep Ocean", hex: 0x49545c },
+  { id: "aged_pewter", label: "Aged Pewter", hex: 0x7d7974 },
+  { id: "night_gray", label: "Night Gray", hex: 0x6a6d6f },
+  { id: "iron_gray", label: "Iron Gray", hex: 0x575b59 },
+  { id: "countrylane_red", label: "Countrylane Red", hex: 0x714d47 },
+  { id: "midnight_black", label: "Midnight Black", hex: 0x3d3e3e },
 ];
 
 // Material names to skip when building per-group swap dropdowns.
