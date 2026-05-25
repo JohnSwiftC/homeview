@@ -1,5 +1,5 @@
 export const MODELS = [
-  { id: "mvphome", label: "mvphome", url: "./models/mvphome.glb" },
+  { id: "mvphome", label: "mvphome", url: "/models/mvphome.glb" },
 ];
 
 export const PAINT_MATERIAL_NAME = "MainPaint";
@@ -40,7 +40,7 @@ export const MATERIAL_LABELS = {
 // file per swatch, or any mix. Display name = the material's name in Blender.
 // The same file under multiple groups is fetched only once.
 export const GROUP_SWATCHES = {
-  RusticStone: ["./models/swatches/veneers.glb"],
+  RusticStone: ["/models/swatches/veneers.glb"],
 };
 
 // can mess with material scaling here,
