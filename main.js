@@ -138,14 +138,18 @@ function createSelector({ key, label, items, initialValue, onChange, previewFor 
 
 // Single knob for how strongly the environment (RoomEnvironment) lights surfaces.
 // Higher = brighter, more lit-from-all-sides look. ~1.0–2.0 is the useful range.
-const ENV_INTENSITY = 1.4;
+const ENV_INTENSITY = 0.7;
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+// NoToneMapping keeps surface colors faithful to the input hex (ACES Filmic
+// darkened/hue-shifted them, esp. reds). Trade-off: no highlight roll-off, so
+// keep the lighting rig below tighter so bright albedos (e.g. Arctic White)
+// don't clip to white.
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.toneMappingExposure = 1.0;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a1a);
@@ -165,24 +169,28 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.target.set(0, 1, 0);
 
-// Studio-style rig: warm key + cool fill from opposite side + back/rim,
-// over a strong hemisphere ambient. No shadow casters — nothing goes dark.
-const hemi = new THREE.HemisphereLight(0xfff2e0, 0x8a99b3, 0.9);
+// Studio-style rig: warm key + cool fill from opposite side + back/rim, over a
+// hemisphere ambient. No shadow casters — nothing goes dark. Intensities are
+// kept modest because NoToneMapping has no highlight roll-off: the aggregate
+// irradiance on the brightest face should stay near ~1.0 so colors render close
+// to their albedo and high-value paints don't clip. Scale these together to
+// brighten/darken the whole scene.
+const hemi = new THREE.HemisphereLight(0xfff2e0, 0x8a99b3, 0.55);
 scene.add(hemi);
 
-const key = new THREE.DirectionalLight(0xfff0d8, 1.6);
+const key = new THREE.DirectionalLight(0xfff0d8, 0.7);
 key.position.set(6, 9, 5);
 scene.add(key);
 
-const fill = new THREE.DirectionalLight(0xc8d8ff, 0.9);
+const fill = new THREE.DirectionalLight(0xc8d8ff, 0.4);
 fill.position.set(-7, 5, -3);
 scene.add(fill);
 
-const rim = new THREE.DirectionalLight(0xffffff, 0.5);
+const rim = new THREE.DirectionalLight(0xffffff, 0.25);
 rim.position.set(0, 6, -8);
 scene.add(rim);
 
-const underfill = new THREE.DirectionalLight(0xfff5e8, 0.3);
+const underfill = new THREE.DirectionalLight(0xfff5e8, 0.15);
 underfill.position.set(0, -4, 2);
 scene.add(underfill);
 
@@ -471,9 +479,9 @@ async function loadModel(modelDef) {
 function applyPaintColor(colorDef) {
   if (!colorDef || paintMaterials.length === 0) return;
   for (const m of paintMaterials) {
+    // ColorManagement is on (three r160), so setHex treats the hex as sRGB
+    // and converts to the linear working space for us.
     m.color.setHex(colorDef.hex);
-    // gltf base color is in linear space; setHex assumes sRGB, so convert:
-    m.color.convertSRGBToLinear();
     m.needsUpdate = true;
   }
 }
