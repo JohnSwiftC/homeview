@@ -1,7 +1,9 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Home Viewer",
+  title: "Homeview — accurate home design visualization",
+  description:
+    "A fast three.js rendering pipeline for visualizing home color schemes and designs across property developments.",
 };
 
 export const viewport = {
