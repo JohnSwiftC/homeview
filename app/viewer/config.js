@@ -49,6 +49,6 @@ export const GROUP_SWATCHES = {
 // go into the individual swatches
 export const TEXTURE_SCALES = {
   mvphome: {
-    RusticStone: { group: [0.2, 0.2], swatches: { RedBrick: [0.15, 0.15] } },
+    RusticStone: { group: [0.2, 0.2], swatches: {} },
   },
 };
