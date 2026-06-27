@@ -23,13 +23,16 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 // Cap textures at this size. Color/emissive use lossy WebP; normal, roughness,
 // and occlusion are linear data maps and get higher quality to avoid artifacts.
-const MAX_SIZE = 2048;
+const MAX_SIZE = 1024;
 const COLOR_QUALITY = 82;
 const DATA_QUALITY = 92;
 
 const JOBS = [
   { src: "models-src/mvphome.glb", out: "public/models/mvphome.glb" },
-  { src: "models-src/swatches/veneers.glb", out: "public/models/swatches/veneers.glb" },
+  {
+    src: "models-src/swatches/veneers.glb",
+    out: "public/models/swatches/veneers.glb",
+  },
 ];
 
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
