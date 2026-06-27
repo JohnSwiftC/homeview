@@ -5,12 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "compress:models": "node scripts/compress-models.mjs"
   },
   "dependencies": {
     "next": "14.2.15",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "three": "0.160.0"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.4.0"
   }
 }

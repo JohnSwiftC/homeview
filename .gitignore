@@ -19,3 +19,6 @@ yarn-error.log*
 
 # env files
 .env*.local
+
+# full-res model sources (compressed into public/models via npm run compress:models)
+/models-src
