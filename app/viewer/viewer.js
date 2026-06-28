@@ -10,7 +10,10 @@ import {
   MATERIAL_LABELS,
   GROUP_SWATCHES,
   TEXTURE_SCALES,
+  AI_IMAGE,
 } from "./config.js";
+import { captureView } from "./aiImage.js";
+import { beginOAuth, completeOAuth, generateImage } from "./openrouter.js";
 
 // Imperative three.js viewer. Called once from HomeViewer's effect after the
 // UI shell has mounted; returns a cleanup that tears the scene down again.
@@ -595,6 +598,293 @@ export default function initViewer() {
     status.textContent = "No models configured. Add entries to config.js.";
   }
 
+  // --- AI Render (OpenRouter OAuth, billed to the user) -----------------
+  const OR_KEY_STORE = "homeview.openrouter_key";
+  const aiOpenBtn = document.getElementById("ai-open");
+  const aiModal = document.getElementById("ai-modal");
+  const aiBackdrop = document.getElementById("ai-backdrop");
+  const aiCloseBtn = document.getElementById("ai-close");
+  const aiAuth = document.getElementById("ai-auth");
+  const aiConnected = document.getElementById("ai-connected");
+  const aiConnectBtn = document.getElementById("ai-connect");
+  const aiDisconnectBtn = document.getElementById("ai-disconnect");
+  const aiExtraInput = document.getElementById("ai-extra");
+  const aiStatus = document.getElementById("ai-status");
+  const aiResult = document.getElementById("ai-result");
+
+  const readKey = () => {
+    try {
+      return localStorage.getItem(OR_KEY_STORE);
+    } catch {
+      return null;
+    }
+  };
+
+  function setAiStatus(message, isError = false) {
+    aiStatus.textContent = message;
+    aiStatus.classList.toggle("error", isError);
+  }
+
+  function reflectConnection() {
+    const connected = Boolean(readKey());
+    aiAuth.classList.toggle("hidden", connected);
+    aiConnected.classList.toggle("hidden", !connected);
+  }
+  reflectConnection();
+
+  const openAiModal = () => aiModal.classList.remove("hidden");
+  const closeAiModal = () => aiModal.classList.add("hidden");
+  aiOpenBtn.addEventListener("click", openAiModal);
+  aiCloseBtn.addEventListener("click", closeAiModal);
+  aiBackdrop.addEventListener("click", closeAiModal);
+
+  // If we just returned from OpenRouter's consent screen, finish the exchange.
+  completeOAuth()
+    .then((key) => {
+      if (!key) return;
+      try {
+        localStorage.setItem(OR_KEY_STORE, key);
+      } catch {
+        /* private mode: key lives only for this page session */
+      }
+      reflectConnection();
+      openAiModal();
+      setAiStatus("Connected — ready to generate.");
+    })
+    .catch((err) => {
+      reflectConnection();
+      openAiModal();
+      setAiStatus(`Sign-in failed: ${err.message}`, true);
+    });
+
+  function onConnect() {
+    // Return to this exact URL so the current design (model/paint/swatches in
+    // the query string) is restored after the redirect.
+    beginOAuth(window.location.href).catch((err) =>
+      setAiStatus(`Could not start sign-in: ${err.message}`, true),
+    );
+  }
+  function onDisconnect() {
+    try {
+      localStorage.removeItem(OR_KEY_STORE);
+    } catch {
+      /* ignore */
+    }
+    reflectConnection();
+    setAiStatus("");
+  }
+  aiConnectBtn.addEventListener("click", onConnect);
+  aiDisconnectBtn.addEventListener("click", onDisconnect);
+
+  // --- Selection flow: orbit to frame, draw a box, generate from that crop ---
+  const aiStartBtn = document.getElementById("ai-start");
+  const aiSelect = document.getElementById("ai-select");
+  const aiSelSurface = document.getElementById("ai-select-surface");
+  const aiSelBox = document.getElementById("ai-select-box");
+  const aiSelMsg = document.getElementById("ai-select-msg");
+  const aiSelDraw = document.getElementById("ai-sel-draw");
+  const aiSelGo = document.getElementById("ai-sel-go");
+  const aiSelRedo = document.getElementById("ai-sel-redo");
+  const aiSelBack = document.getElementById("ai-sel-back");
+  const aiSelCancel = document.getElementById("ai-sel-cancel");
+
+  // States: "off" | "orbit" (frame freely) | "draw" (drag a box) | "review".
+  let selState = "off";
+  let selRect = null;
+  let dragStart = null;
+  const SEL_MSG = {
+    orbit: "Orbit and zoom to frame your home, then click “Draw box”.",
+    draw: "Drag a box around your home.",
+    review: "Generate from this selection, or redo the box.",
+  };
+  const show = (el, on) => el.classList.toggle("hidden", !on);
+
+  function setSelState(s) {
+    selState = s;
+    aiSelMsg.textContent = SEL_MSG[s] ?? "";
+    show(aiSelDraw, s === "orbit");
+    show(aiSelGo, s === "review");
+    show(aiSelRedo, s === "review");
+    show(aiSelBack, s === "draw" || s === "review");
+    show(aiSelCancel, s !== "off");
+    // The drawing surface only intercepts the mouse while drawing/reviewing;
+    // in orbit it stays click-through so OrbitControls drives the camera.
+    aiSelSurface.style.pointerEvents = s === "draw" || s === "review" ? "auto" : "none";
+    controls.enabled = s !== "draw" && s !== "review";
+    if (s === "orbit" || s === "off") {
+      aiSelBox.classList.add("hidden");
+      selRect = null;
+    }
+  }
+
+  function enterSelection() {
+    if (!currentModel) return setAiStatus("Model is still loading…", true);
+    closeAiModal();
+    aiSelect.classList.remove("hidden");
+    setSelState("orbit");
+  }
+  function exitSelection() {
+    aiSelect.classList.add("hidden");
+    setSelState("off");
+  }
+
+  function updateBox(r) {
+    aiSelBox.style.left = `${r.x}px`;
+    aiSelBox.style.top = `${r.y}px`;
+    aiSelBox.style.width = `${r.width}px`;
+    aiSelBox.style.height = `${r.height}px`;
+  }
+  function onSurfaceDown(e) {
+    if (selState !== "draw" && selState !== "review") return;
+    aiSelSurface.setPointerCapture(e.pointerId);
+    dragStart = { x: e.clientX, y: e.clientY };
+    selRect = { x: e.clientX, y: e.clientY, width: 0, height: 0 };
+    updateBox(selRect);
+    aiSelBox.classList.remove("hidden");
+  }
+  function onSurfaceMove(e) {
+    if (!dragStart) return;
+    selRect = {
+      x: Math.min(dragStart.x, e.clientX),
+      y: Math.min(dragStart.y, e.clientY),
+      width: Math.abs(e.clientX - dragStart.x),
+      height: Math.abs(e.clientY - dragStart.y),
+    };
+    updateBox(selRect);
+  }
+  function onSurfaceUp() {
+    if (!dragStart) return;
+    dragStart = null;
+    if (selRect && selRect.width >= 8 && selRect.height >= 8) setSelState("review");
+    else {
+      aiSelBox.classList.add("hidden");
+      selRect = null;
+    }
+  }
+  aiSelSurface.addEventListener("pointerdown", onSurfaceDown);
+  aiSelSurface.addEventListener("pointermove", onSurfaceMove);
+  aiSelSurface.addEventListener("pointerup", onSurfaceUp);
+
+  const onSelDraw = () => setSelState("draw");
+  const onSelRedo = () => setSelState("draw");
+  const onSelBack = () => setSelState("orbit");
+  const onSelCancel = () => {
+    exitSelection();
+    openAiModal();
+  };
+  aiSelDraw.addEventListener("click", onSelDraw);
+  aiSelRedo.addEventListener("click", onSelRedo);
+  aiSelBack.addEventListener("click", onSelBack);
+  aiSelCancel.addEventListener("click", onSelCancel);
+  aiStartBtn.addEventListener("click", enterSelection);
+
+  let generating = false;
+  function onGenerateFromSelection() {
+    if (generating) return;
+    if (!selRect || selRect.width < 8 || selRect.height < 8) return;
+    if (!readKey()) {
+      exitSelection();
+      openAiModal();
+      return setAiStatus("Connect your OpenRouter account first.", true);
+    }
+    let reference;
+    try {
+      reference = captureView({
+        renderer,
+        scene,
+        camera,
+        model: currentModel,
+        rect: selRect,
+        fullWidth: window.innerWidth,
+        fullHeight: window.innerHeight,
+        maxSize: AI_IMAGE.CAPTURE_MAX,
+        skyColor: AI_IMAGE.SKY_COLOR,
+        groundColor: AI_IMAGE.GROUND_COLOR,
+      });
+    } catch (err) {
+      exitSelection();
+      openAiModal();
+      return setAiStatus(`Capture failed: ${err.message}`, true);
+    }
+    exitSelection();
+    openAiModal();
+    runGeneration(reference);
+  }
+  aiSelGo.addEventListener("click", onGenerateFromSelection);
+
+  function resultCard(url, { alt, downloadName, caption }) {
+    const card = document.createElement("figure");
+    card.className = "ai-card";
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = alt;
+    card.append(img);
+    if (caption) {
+      const cap = document.createElement("figcaption");
+      cap.className = "ai-caption";
+      cap.textContent = caption;
+      card.append(cap);
+    }
+    if (downloadName) {
+      const dl = document.createElement("a");
+      dl.href = url;
+      dl.download = downloadName;
+      dl.textContent = "Download image";
+      card.append(dl);
+    }
+    return card;
+  }
+
+  async function runGeneration(reference) {
+    generating = true;
+    aiStartBtn.disabled = true;
+    aiResult.innerHTML = "";
+    // Show the exact reference we captured next to the result.
+    aiResult.append(
+      resultCard(reference, { alt: "Your selected view", caption: "your selection" }),
+    );
+    const spinner = document.createElement("div");
+    spinner.className = "ai-spinner";
+    aiResult.append(spinner);
+    setAiStatus("Generating — this can take 15–60s…");
+    try {
+      const extra = aiExtraInput.value.trim();
+      const prompt = extra
+        ? `${AI_IMAGE.SYSTEM_PROMPT}\n\nAdditional direction: ${extra}`
+        : AI_IMAGE.SYSTEM_PROMPT;
+      const url = await generateImage({
+        apiKey: readKey(),
+        model: AI_IMAGE.MODEL,
+        images: [reference],
+        prompt,
+      });
+      aiResult.insertBefore(
+        resultCard(url, {
+          alt: "AI-generated render of the home",
+          downloadName: "homeview-render.png",
+        }),
+        spinner,
+      );
+      setAiStatus("Done.");
+    } catch (err) {
+      // A stale/invalid key (e.g. user revoked it) drops us back to connect.
+      if (/session expired/i.test(err.message)) {
+        try {
+          localStorage.removeItem(OR_KEY_STORE);
+        } catch {
+          /* ignore */
+        }
+        reflectConnection();
+      }
+      setAiStatus(`Failed: ${err.message}`, true);
+      console.error(err);
+    } finally {
+      spinner.remove();
+      generating = false;
+      aiStartBtn.disabled = false;
+    }
+  }
+
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -618,6 +908,20 @@ export default function initViewer() {
     document.removeEventListener("keydown", onKeyDown);
     modelSelect.removeEventListener("change", onModelChange);
     copyLinkBtn.removeEventListener("click", onCopyLink);
+    aiOpenBtn.removeEventListener("click", openAiModal);
+    aiCloseBtn.removeEventListener("click", closeAiModal);
+    aiBackdrop.removeEventListener("click", closeAiModal);
+    aiConnectBtn.removeEventListener("click", onConnect);
+    aiDisconnectBtn.removeEventListener("click", onDisconnect);
+    aiStartBtn.removeEventListener("click", enterSelection);
+    aiSelDraw.removeEventListener("click", onSelDraw);
+    aiSelRedo.removeEventListener("click", onSelRedo);
+    aiSelBack.removeEventListener("click", onSelBack);
+    aiSelCancel.removeEventListener("click", onSelCancel);
+    aiSelGo.removeEventListener("click", onGenerateFromSelection);
+    aiSelSurface.removeEventListener("pointerdown", onSurfaceDown);
+    aiSelSurface.removeEventListener("pointermove", onSurfaceMove);
+    aiSelSurface.removeEventListener("pointerup", onSurfaceUp);
     controls.dispose();
     pmrem.dispose();
     renderer.dispose();

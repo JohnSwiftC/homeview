@@ -225,6 +225,212 @@ body.viewer-active {
   min-height: 14px;
 }
 
+/* AI Render modal */
+#ai-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
+#ai-form {
+  flex: 0 0 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#ai-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #ccc;
+}
+#ai-form textarea {
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 8px;
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+#ai-form textarea:focus {
+  outline: none;
+  border-color: #888;
+}
+.ai-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #888;
+}
+#ai-connect {
+  background: #2f6f4f;
+  color: #fff;
+  border: 1px solid #3c8a63;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  width: 100%;
+}
+#ai-connect:hover { background: #357c59; }
+#ai-connected {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#ai-connected.hidden,
+#ai-auth.hidden { display: none; }
+.ai-connected-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ai-connected-badge {
+  font-size: 12px;
+  color: #8fd0ac;
+}
+.ai-link {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.ai-link:hover { color: #bbb; }
+#ai-start {
+  background: #2f6f4f;
+  color: #fff;
+  border: 1px solid #3c8a63;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+#ai-start:hover { background: #357c59; }
+#ai-start:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.ai-secondary {
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #444;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.ai-secondary:hover { background: #353535; }
+.ai-caption {
+  font-size: 12px;
+  color: #888;
+}
+
+/* Selection overlay: orbit to frame, draw a box, generate from that crop. */
+#ai-select {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none; /* container is click-through; children opt in */
+}
+#ai-select.hidden { display: none; }
+#ai-select-surface {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  /* pointer-events toggled in JS: auto only while drawing/reviewing */
+}
+#ai-select-box {
+  position: absolute;
+  border: 2px dashed #8fd0ac;
+  background: rgba(143, 208, 172, 0.12);
+  pointer-events: none;
+  /* dim everything outside the selection */
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+#ai-select-box.hidden { display: none; }
+#ai-select-bar {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 24px);
+  background: rgba(0, 0, 0, 0.82);
+  padding: 10px 14px;
+  border-radius: 8px;
+  pointer-events: auto;
+}
+#ai-select-bar .hidden { display: none; }
+#ai-select-msg {
+  font-size: 13px;
+  color: #eee;
+}
+#ai-status {
+  font-size: 12px;
+  color: #bbb;
+  min-height: 16px;
+}
+#ai-status.error { color: #ff8a80; }
+#ai-result {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+.ai-card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ai-card img {
+  max-width: 100%;
+  max-height: 60vh;
+  border-radius: 8px;
+  border: 1px solid #444;
+}
+.ai-card a {
+  color: #8fd0ac;
+  font-size: 13px;
+  text-decoration: none;
+}
+.ai-card a:hover { text-decoration: underline; }
+.ai-spinner {
+  width: 36px;
+  height: 36px;
+  border: 4px solid #3a3a3a;
+  border-top-color: #8fd0ac;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@media (max-width: 600px) {
+  #ai-content {
+    flex-direction: column;
+    gap: 16px;
+  }
+  #ai-form {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+
 /* On phones the desktop grid (minmax 220px) collapses to a single column, so
    each tile's aspect-ratio:1 preview balloons to the full content width — paint
    becomes a stack of huge color blocks and material textures get upscaled and

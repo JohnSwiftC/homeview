@@ -34,13 +34,23 @@ export const MATERIAL_LABELS = {
   RusticStone: "Stone Veneer",
 };
 
-// For each group, list one or more .glb files. Every material found inside each
-// file becomes a swatch option for that group. Organize however you like — one
-// big file per group (e.g. "veneers.glb" containing every stone option), one
-// file per swatch, or any mix. Display name = the material's name in Blender.
-// The same file under multiple groups is fetched only once.
 export const GROUP_SWATCHES = {
   RusticStone: ["/models/swatches/veneers.glb"],
+};
+
+export const AI_IMAGE = {
+  MODEL: "google/gemini-2.5-flash-image",
+
+  SYSTEM_PROMPT:
+    "Turn this 3D render of a house into a realistic photograph. Keep the house " +
+    "and its setting exactly as shown — same building shape, roof, windows, doors, " +
+    "proportions, paint color, stone veneer, ground, and camera angle. Only make " +
+    "the materials and lighting look real, with natural daylight. Do not add, " +
+    "remove, or move any object.",
+
+  CAPTURE_MAX: 1280, // px, longest edge of the captured selection
+  SKY_COLOR: 0x9fc4e8, // capture backdrop: soft sky blue
+  GROUND_COLOR: 0x7e8b63, // capture ground plane: muted grass/olive
 };
 
 // can mess with material scaling here,
