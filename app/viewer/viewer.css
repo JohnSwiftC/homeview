@@ -333,6 +333,54 @@ body.viewer-active {
   color: #888;
 }
 
+/* Refine panel: the captured reference + a tunable prompt for regeneration. */
+#ai-refine {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #333;
+}
+#ai-refine.hidden { display: none; }
+#ai-ref-img {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #444;
+}
+#ai-regen {
+  background: #2f6f4f;
+  color: #fff;
+  border: 1px solid #3c8a63;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+#ai-regen:hover { background: #357c59; }
+#ai-regen:disabled { opacity: 0.55; cursor: default; }
+
+/* Iteration card: caption + scrap button header above the image. */
+.ai-iter-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  order: -1;
+}
+.ai-scrap {
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.ai-scrap:hover { color: #ff8a80; background: rgba(255, 255, 255, 0.08); }
+
 /* Selection overlay: orbit to frame, draw a box, generate from that crop. */
 #ai-select {
   position: fixed;

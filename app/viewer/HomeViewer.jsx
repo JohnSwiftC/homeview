@@ -95,6 +95,20 @@ export default function HomeViewer() {
                   Select area to generate
                 </button>
               </div>
+              <div id="ai-refine" className="hidden">
+                <img id="ai-ref-img" alt="Your selected view" />
+                <label>
+                  Tune the prompt, then regenerate
+                  <textarea
+                    id="ai-refine-input"
+                    rows="3"
+                    placeholder="Describe changes — e.g. warmer evening light, add a porch"
+                  ></textarea>
+                </label>
+                <button id="ai-regen" type="button">
+                  Regenerate
+                </button>
+              </div>
               <div id="ai-status"></div>
             </div>
             <div id="ai-result"></div>

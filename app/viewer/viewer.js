@@ -812,7 +812,16 @@ export default function initViewer() {
   aiSelCancel.addEventListener("click", onSelCancel);
   aiStartBtn.addEventListener("click", enterSelection);
 
+  // --- Generation + tuning session: capture once, iterate prompts on it ------
+  const aiRefine = document.getElementById("ai-refine");
+  const aiRefImg = document.getElementById("ai-ref-img");
+  const aiRefineInput = document.getElementById("ai-refine-input");
+  const aiRegenBtn = document.getElementById("ai-regen");
+
   let generating = false;
+  let currentReference = null; // captured view bound to the active tuning session
+  let iterCount = 0;
+
   function onGenerateFromSelection() {
     if (generating) return;
     if (!selRect || selRect.width < 8 || selRect.height < 8) return;
@@ -842,68 +851,89 @@ export default function initViewer() {
     }
     exitSelection();
     openAiModal();
-    runGeneration(reference);
+
+    // Begin a fresh tuning session bound to this captured view: all subsequent
+    // regenerations reuse this reference, so the house stays consistent while
+    // only the prompt changes.
+    currentReference = reference;
+    iterCount = 0;
+    aiRefImg.src = reference;
+    aiRefineInput.value = aiExtraInput.value.trim();
+    aiRefine.classList.remove("hidden");
+    aiResult.innerHTML = "";
+    runGeneration(aiRefineInput.value);
+  }
+  function onRegenerate() {
+    runGeneration(aiRefineInput.value);
   }
   aiSelGo.addEventListener("click", onGenerateFromSelection);
+  aiRegenBtn.addEventListener("click", onRegenerate);
 
-  function resultCard(url, { alt, downloadName, caption }) {
+  function buildPrompt(extra) {
+    const e = extra?.trim();
+    return e
+      ? `${AI_IMAGE.SYSTEM_PROMPT}\n\nAdditional direction: ${e}`
+      : AI_IMAGE.SYSTEM_PROMPT;
+  }
+
+  // One attempt: image + the prompt note used + Download + Scrap. Newest first.
+  function makeIteration(url, extra) {
+    iterCount += 1;
+    const n = iterCount;
     const card = document.createElement("figure");
-    card.className = "ai-card";
+    card.className = "ai-card ai-iteration";
+
+    const bar = document.createElement("figcaption");
+    bar.className = "ai-iter-bar";
+    const cap = document.createElement("span");
+    cap.className = "ai-caption";
+    cap.textContent = extra?.trim() ? `#${n} · ${extra.trim()}` : `#${n} · base`;
+    const scrap = document.createElement("button");
+    scrap.type = "button";
+    scrap.className = "ai-scrap";
+    scrap.title = "Scrap this attempt";
+    scrap.textContent = "✕";
+    scrap.addEventListener("click", () => card.remove());
+    bar.append(cap, scrap);
+
     const img = document.createElement("img");
     img.src = url;
-    img.alt = alt;
-    card.append(img);
-    if (caption) {
-      const cap = document.createElement("figcaption");
-      cap.className = "ai-caption";
-      cap.textContent = caption;
-      card.append(cap);
-    }
-    if (downloadName) {
-      const dl = document.createElement("a");
-      dl.href = url;
-      dl.download = downloadName;
-      dl.textContent = "Download image";
-      card.append(dl);
-    }
+    img.alt = `AI render #${n}`;
+
+    const dl = document.createElement("a");
+    dl.href = url;
+    dl.download = `homeview-render-${n}.png`;
+    dl.textContent = "Download";
+
+    card.append(bar, img, dl);
     return card;
   }
 
-  async function runGeneration(reference) {
+  async function runGeneration(extra) {
+    if (generating || !currentReference) return;
+    const apiKey = readKey();
+    if (!apiKey) {
+      reflectConnection();
+      return setAiStatus("Connect your OpenRouter account first.", true);
+    }
     generating = true;
+    aiRegenBtn.disabled = true;
     aiStartBtn.disabled = true;
-    aiResult.innerHTML = "";
-    // Show the exact reference we captured next to the result.
-    aiResult.append(
-      resultCard(reference, {
-        alt: "Your selected view",
-        caption: "your selection",
-      }),
-    );
     const spinner = document.createElement("div");
     spinner.className = "ai-spinner";
-    aiResult.append(spinner);
-    setAiStatus("Generating — this can take 15–60s…");
+    aiResult.prepend(spinner);
+    setAiStatus(`Generating${extra?.trim() ? " (refined)" : ""} — 15–60s…`);
     try {
-      const extra = aiExtraInput.value.trim();
-      const prompt = extra
-        ? `${AI_IMAGE.SYSTEM_PROMPT}\n\nAdditional direction: ${extra}`
-        : AI_IMAGE.SYSTEM_PROMPT;
       const url = await generateImage({
-        apiKey: readKey(),
+        apiKey,
         model: AI_IMAGE.MODEL,
-        images: [reference],
-        prompt,
+        images: [currentReference],
+        prompt: buildPrompt(extra),
       });
-      aiResult.insertBefore(
-        resultCard(url, {
-          alt: "AI-generated render of the home",
-          downloadName: "homeview-render.png",
-        }),
-        spinner,
-      );
-      setAiStatus("Done.");
+      spinner.replaceWith(makeIteration(url, extra));
+      setAiStatus("Done. Tune the prompt and regenerate, or scrap attempts.");
     } catch (err) {
+      spinner.remove();
       // A stale/invalid key (e.g. user revoked it) drops us back to connect.
       if (/session expired/i.test(err.message)) {
         try {
@@ -916,8 +946,8 @@ export default function initViewer() {
       setAiStatus(`Failed: ${err.message}`, true);
       console.error(err);
     } finally {
-      spinner.remove();
       generating = false;
+      aiRegenBtn.disabled = false;
       aiStartBtn.disabled = false;
     }
   }
@@ -973,6 +1003,7 @@ export default function initViewer() {
     aiSelBack.removeEventListener("click", onSelBack);
     aiSelCancel.removeEventListener("click", onSelCancel);
     aiSelGo.removeEventListener("click", onGenerateFromSelection);
+    aiRegenBtn.removeEventListener("click", onRegenerate);
     aiSelSurface.removeEventListener("pointerdown", onSurfaceDown);
     aiSelSurface.removeEventListener("pointermove", onSurfaceMove);
     aiSelSurface.removeEventListener("pointerup", onSurfaceUp);

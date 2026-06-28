@@ -39,7 +39,7 @@ export const GROUP_SWATCHES = {
 };
 
 export const AI_IMAGE = {
-  MODEL: "google/gemini-2.5-flash-image",
+  MODEL: "google/gemini-3.1-flash-image-preview",
 
   SYSTEM_PROMPT:
     "Turn this 3D render of a house into a realistic photograph. Keep the house " +
