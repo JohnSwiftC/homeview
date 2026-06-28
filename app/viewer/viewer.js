@@ -59,7 +59,14 @@ export default function initViewer() {
   document.addEventListener("keydown", onKeyDown);
 
   // items: [{ value, label }]; previewFor(item, size) -> HTMLElement (fresh each call)
-  function createSelector({ key, label, items, initialValue, onChange, previewFor }) {
+  function createSelector({
+    key,
+    label,
+    items,
+    initialValue,
+    onChange,
+    previewFor,
+  }) {
     const wrapper = document.createElement("div");
     wrapper.className = "selector";
     wrapper.dataset.stateKey = key;
@@ -145,7 +152,8 @@ export default function initViewer() {
       triggerPreview.innerHTML = "";
       triggerPreview.appendChild(previewFor(item, 24));
       triggerText.textContent = item.label;
-      for (const [v, tile] of tilesByValue) tile.classList.toggle("active", v === item.value);
+      for (const [v, tile] of tilesByValue)
+        tile.classList.toggle("active", v === item.value);
       if (fire) onChange(item.value, item);
     }
 
@@ -160,7 +168,11 @@ export default function initViewer() {
     });
 
     setValue(initialValue, false);
-    return { element: wrapper, setValue, getValue: () => wrapper.dataset.value };
+    return {
+      element: wrapper,
+      setValue,
+      getValue: () => wrapper.dataset.value,
+    };
   }
 
   // Single knob for how strongly the environment (RoomEnvironment) lights surfaces.
@@ -208,6 +220,7 @@ export default function initViewer() {
   const key = new THREE.DirectionalLight(0xfff0d8, 0.7);
   key.position.set(6, 9, 5);
   scene.add(key);
+  scene.add(key.target);
 
   const fill = new THREE.DirectionalLight(0xc8d8ff, 0.4);
   fill.position.set(-7, 5, -3);
@@ -432,8 +445,16 @@ export default function initViewer() {
       );
 
       const items = [
-        { value: "__default__", label: group.name, material: group.defaultMaterial },
-        ...[...swatchMap].map(([name, mat]) => ({ value: name, label: name, material: mat })),
+        {
+          value: "__default__",
+          label: group.name,
+          material: group.defaultMaterial,
+        },
+        ...[...swatchMap].map(([name, mat]) => ({
+          value: name,
+          label: name,
+          material: mat,
+        })),
       ];
 
       const selector = createSelector({
@@ -445,7 +466,10 @@ export default function initViewer() {
         onChange: (value, item) => {
           applyTextureScale(
             item.material,
-            resolveScale(groupScaleEntry, value === "__default__" ? null : value),
+            resolveScale(
+              groupScaleEntry,
+              value === "__default__" ? null : value,
+            ),
           );
           for (const mesh of group.meshes) mesh.material = item.material;
           updateUrlFromState();
@@ -484,7 +508,9 @@ export default function initViewer() {
         status.textContent = `Loaded ${modelDef.label}, but no material named "${PAINT_MATERIAL_NAME}" was found.`;
       } else {
         status.textContent = `Loaded ${modelDef.label}`;
-        applyPaintColor(PAINT_COLORS.find((c) => c.id === paintSelector.getValue()));
+        applyPaintColor(
+          PAINT_COLORS.find((c) => c.id === paintSelector.getValue()),
+        );
       }
 
       // Material swatches (stone veneer, etc.) load separately and can take a
@@ -541,7 +567,9 @@ export default function initViewer() {
         `.selector[data-state-key="${CSS.escape(key)}"]`,
       );
       if (!sel) continue;
-      const tile = sel.querySelector(`.modal-grid .tile[data-value="${CSS.escape(value)}"]`);
+      const tile = sel.querySelector(
+        `.modal-grid .tile[data-value="${CSS.escape(value)}"]`,
+      );
       if (tile) tile.click();
     }
   }
@@ -560,7 +588,11 @@ export default function initViewer() {
   const paintSelector = createSelector({
     key: "paint",
     label: "Paint Color",
-    items: PAINT_COLORS.map((c) => ({ value: c.id, label: c.label, hex: c.hex })),
+    items: PAINT_COLORS.map((c) => ({
+      value: c.id,
+      label: c.label,
+      hex: c.hex,
+    })),
     initialValue: startingPaintId,
     previewFor: (item) => makeColorPreview(item.hex),
     onChange: (value) => {
@@ -709,7 +741,8 @@ export default function initViewer() {
     show(aiSelCancel, s !== "off");
     // The drawing surface only intercepts the mouse while drawing/reviewing;
     // in orbit it stays click-through so OrbitControls drives the camera.
-    aiSelSurface.style.pointerEvents = s === "draw" || s === "review" ? "auto" : "none";
+    aiSelSurface.style.pointerEvents =
+      s === "draw" || s === "review" ? "auto" : "none";
     controls.enabled = s !== "draw" && s !== "review";
     if (s === "orbit" || s === "off") {
       aiSelBox.classList.add("hidden");
@@ -755,7 +788,8 @@ export default function initViewer() {
   function onSurfaceUp() {
     if (!dragStart) return;
     dragStart = null;
-    if (selRect && selRect.width >= 8 && selRect.height >= 8) setSelState("review");
+    if (selRect && selRect.width >= 8 && selRect.height >= 8)
+      setSelState("review");
     else {
       aiSelBox.classList.add("hidden");
       selRect = null;
@@ -841,7 +875,10 @@ export default function initViewer() {
     aiResult.innerHTML = "";
     // Show the exact reference we captured next to the result.
     aiResult.append(
-      resultCard(reference, { alt: "Your selected view", caption: "your selection" }),
+      resultCard(reference, {
+        alt: "Your selected view",
+        caption: "your selection",
+      }),
     );
     const spinner = document.createElement("div");
     spinner.className = "ai-spinner";
@@ -892,9 +929,26 @@ export default function initViewer() {
   }
   window.addEventListener("resize", onResize);
 
+  // Position the key light relative to the current camera: over the viewer's
+  // shoulder, raised and pushed to one side so visible faces stay lit while
+  // still getting some directional shading (not a flat head-on flash).
+  const _camRight = new THREE.Vector3();
+  const _camUp = new THREE.Vector3();
+  function updateKeyLight() {
+    const dist = camera.position.distanceTo(controls.target) || 1;
+    _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    key.position
+      .copy(camera.position)
+      .addScaledVector(_camUp, dist * 0.6)
+      .addScaledVector(_camRight, -dist * 0.35);
+    key.target.position.copy(controls.target);
+  }
+
   let rafId = 0;
   function tick() {
     controls.update();
+    updateKeyLight();
     renderer.render(scene, camera);
     rafId = requestAnimationFrame(tick);
   }
