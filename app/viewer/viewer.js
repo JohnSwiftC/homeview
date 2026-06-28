@@ -116,7 +116,12 @@ export default function initViewer() {
     grid.className = "modal-grid";
     header.appendChild(title);
     header.appendChild(closeBtn);
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "modal-search";
+    search.placeholder = label ? `Search ${label.toLowerCase()}…` : "Search…";
     panel.appendChild(header);
+    panel.appendChild(search);
     panel.appendChild(grid);
     modal.appendChild(backdrop);
     modal.appendChild(panel);
@@ -126,6 +131,7 @@ export default function initViewer() {
     closeBtn.addEventListener("click", closeActiveModal);
 
     const tilesByValue = new Map();
+    const tileEntries = []; // { tile, label } for name filtering
     for (const item of items) {
       const tile = document.createElement("button");
       tile.type = "button";
@@ -148,7 +154,16 @@ export default function initViewer() {
       });
       grid.appendChild(tile);
       tilesByValue.set(item.value, tile);
+      tileEntries.push({ tile, label: (item.label ?? "").toLowerCase() });
     }
+
+    // Filter tiles by name as the user types.
+    function applyFilter() {
+      const q = search.value.trim().toLowerCase();
+      for (const { tile, label } of tileEntries)
+        tile.classList.toggle("filtered-out", q !== "" && !label.includes(q));
+    }
+    search.addEventListener("input", applyFilter);
 
     function setValue(value, fire = false) {
       const item = items.find((i) => i.value === value) ?? items[0];
@@ -165,8 +180,11 @@ export default function initViewer() {
     trigger.addEventListener("click", () => {
       if (modal.classList.contains("hidden")) {
         closeActiveModal();
+        search.value = "";
+        applyFilter();
         modal.classList.remove("hidden");
         activeModal = modal;
+        search.focus();
       } else {
         closeActiveModal();
       }
@@ -415,9 +433,14 @@ export default function initViewer() {
     previewCanvas.height = size;
     const ctx = previewCanvas.getContext("2d");
     const img = material?.map?.image;
-    if (img && (img.width || img.naturalWidth)) {
+    const iw = img && (img.width || img.naturalWidth);
+    const ih = img && (img.height || img.naturalHeight);
+    if (iw && ih) {
       try {
-        ctx.drawImage(img, 0, 0, size, size);
+        // Center-crop the source to a square (cover) so non-square textures
+        // aren't horizontally squished in the preview.
+        const s = Math.min(iw, ih);
+        ctx.drawImage(img, (iw - s) / 2, (ih - s) / 2, s, s, 0, 0, size, size);
         return previewCanvas;
       } catch {
         /* fall through to color fill */
