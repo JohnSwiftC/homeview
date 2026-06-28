@@ -13,7 +13,12 @@ import {
   AI_IMAGE,
 } from "./config.js";
 import { captureView } from "./aiImage.js";
-import { beginOAuth, completeOAuth, generateImage } from "./openrouter.js";
+import {
+  beginOAuth,
+  completeOAuth,
+  generateImage,
+  fetchImageModels,
+} from "./openrouter.js";
 
 // Imperative three.js viewer. Called once from HomeViewer's effect after the
 // UI shell has mounted; returns a cleanup that tears the scene down again.
@@ -632,6 +637,7 @@ export default function initViewer() {
 
   // --- AI Render (OpenRouter OAuth, billed to the user) -----------------
   const OR_KEY_STORE = "homeview.openrouter_key";
+  const OR_MODEL_STORE = "homeview.openrouter_model";
   const aiOpenBtn = document.getElementById("ai-open");
   const aiModal = document.getElementById("ai-modal");
   const aiBackdrop = document.getElementById("ai-backdrop");
@@ -640,6 +646,10 @@ export default function initViewer() {
   const aiConnected = document.getElementById("ai-connected");
   const aiConnectBtn = document.getElementById("ai-connect");
   const aiDisconnectBtn = document.getElementById("ai-disconnect");
+  const aiModelField = document.getElementById("ai-model");
+  const aiModelTrigger = document.getElementById("ai-model-trigger");
+  const aiModelCurrent = document.getElementById("ai-model-current");
+  const aiModelList = document.getElementById("ai-model-list");
   const aiExtraInput = document.getElementById("ai-extra");
   const aiStatus = document.getElementById("ai-status");
   const aiResult = document.getElementById("ai-result");
@@ -707,6 +717,117 @@ export default function initViewer() {
   }
   aiConnectBtn.addEventListener("click", onConnect);
   aiDisconnectBtn.addEventListener("click", onDisconnect);
+
+  // Custom model dropdown: a native <select> can't show styled cost/quality
+  // tags, so we render our own list. Cost tier is computed from each model's
+  // output price; quality is the hand-maintained map in config.
+  let selectedModel = AI_IMAGE.MODEL;
+  let modelCatalog = [];
+
+  function costInfo(pricing) {
+    const perM = (pricing?.completion ?? 0) * 1e6; // $ per million output tokens
+    let tier = "low";
+    if (perM > 8) tier = "high";
+    else if (perM > 3) tier = "mid";
+    const text = perM >= 1 ? `$${perM.toFixed(0)}/M` : `$${perM.toFixed(2)}/M`;
+    return { tier, text };
+  }
+  function qualityInfo(id) {
+    return (
+      (AI_IMAGE.MODEL_QUALITY ?? []).find((q) => id.includes(q.match)) ?? {
+        tier: "unknown",
+        label: "—",
+      }
+    );
+  }
+  function badge(text, kind, tier, title) {
+    const span = document.createElement("span");
+    span.className = `ai-tag ai-tag-${kind} ai-tag-${tier}`;
+    span.textContent = text;
+    if (title) span.title = title;
+    return span;
+  }
+
+  function renderTrigger() {
+    const m = modelCatalog.find((x) => x.id === selectedModel);
+    aiModelCurrent.textContent = m ? m.name : selectedModel;
+  }
+  const closeModelList = () => {
+    aiModelList.classList.add("hidden");
+    aiModelTrigger.setAttribute("aria-expanded", "false");
+  };
+  function onModelTrigger() {
+    const open = aiModelList.classList.toggle("hidden");
+    aiModelTrigger.setAttribute("aria-expanded", String(!open));
+  }
+  function selectModel(id) {
+    selectedModel = id;
+    try {
+      localStorage.setItem(OR_MODEL_STORE, id);
+    } catch {
+      /* ignore */
+    }
+    renderTrigger();
+    for (const row of aiModelList.children)
+      row.classList.toggle("active", row.dataset.id === id);
+    closeModelList();
+  }
+  function buildModelList() {
+    aiModelList.innerHTML = "";
+    for (const m of modelCatalog) {
+      const cost = costInfo(m.pricing);
+      const quality = qualityInfo(m.id);
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "ai-model-option";
+      row.dataset.id = m.id;
+      if (m.id === selectedModel) row.classList.add("active");
+
+      const name = document.createElement("span");
+      name.className = "ai-model-name";
+      name.textContent = m.name;
+
+      const tags = document.createElement("span");
+      tags.className = "ai-model-tags";
+      tags.append(
+        badge(quality.label, "quality", quality.tier, "Quality (manual rating)"),
+        badge(cost.text, "cost", cost.tier, "Output price per million tokens"),
+      );
+
+      row.append(name, tags);
+      row.addEventListener("click", () => selectModel(m.id));
+      aiModelList.append(row);
+    }
+  }
+  function onDocClickModel(e) {
+    if (!aiModelField.contains(e.target)) closeModelList();
+  }
+  aiModelTrigger.addEventListener("click", onModelTrigger);
+  document.addEventListener("click", onDocClickModel);
+
+  (async () => {
+    let saved = null;
+    try {
+      saved = localStorage.getItem(OR_MODEL_STORE);
+    } catch {
+      /* ignore */
+    }
+    try {
+      const models = await fetchImageModels();
+      if (!models.length) return;
+      modelCatalog = models;
+      // Prefer the saved choice, then the config default, else the first model.
+      const pick = [saved, AI_IMAGE.MODEL].find((id) =>
+        models.some((m) => m.id === id),
+      );
+      selectedModel = pick ?? models[0].id;
+      buildModelList();
+      renderTrigger();
+    } catch (err) {
+      console.warn("Model list failed; using default model:", err.message);
+      aiModelCurrent.textContent = selectedModel;
+    }
+  })();
 
   // --- Selection flow: orbit to frame, draw a box, generate from that crop ---
   const aiStartBtn = document.getElementById("ai-start");
@@ -926,7 +1047,7 @@ export default function initViewer() {
     try {
       const url = await generateImage({
         apiKey,
-        model: AI_IMAGE.MODEL,
+        model: selectedModel || AI_IMAGE.MODEL,
         images: [currentReference],
         prompt: buildPrompt(extra),
       });
@@ -1004,6 +1125,8 @@ export default function initViewer() {
     aiSelCancel.removeEventListener("click", onSelCancel);
     aiSelGo.removeEventListener("click", onGenerateFromSelection);
     aiRegenBtn.removeEventListener("click", onRegenerate);
+    aiModelTrigger.removeEventListener("click", onModelTrigger);
+    document.removeEventListener("click", onDocClickModel);
     aiSelSurface.removeEventListener("pointerdown", onSurfaceDown);
     aiSelSurface.removeEventListener("pointermove", onSurfaceMove);
     aiSelSurface.removeEventListener("pointerup", onSurfaceUp);

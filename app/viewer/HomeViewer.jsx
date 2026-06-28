@@ -83,6 +83,23 @@ export default function HomeViewer() {
                     Disconnect
                   </button>
                 </div>
+                <div className="ai-field">
+                  <span className="ai-field-label">Model</span>
+                  <div id="ai-model" className="ai-model">
+                    <button
+                      id="ai-model-trigger"
+                      type="button"
+                      className="ai-model-trigger"
+                      aria-expanded="false"
+                    >
+                      <span id="ai-model-current">Loading models…</span>
+                      <span className="ai-model-caret" aria-hidden="true">
+                        ▾
+                      </span>
+                    </button>
+                    <div id="ai-model-list" className="ai-model-list hidden"></div>
+                  </div>
+                </div>
                 <label>
                   Add to the scene (optional)
                   <textarea

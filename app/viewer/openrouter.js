@@ -1,7 +1,35 @@
 const AUTH_URL = "https://openrouter.ai/auth";
 const KEYS_URL = "https://openrouter.ai/api/v1/auth/keys";
 const CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
+const MODELS_URL = "https://openrouter.ai/api/v1/models";
 const VERIFIER_STORE = "homeview.or_verifier";
+
+// Fetch OpenRouter's catalog and keep only models that can edit images — i.e.
+// accept an image AND return an image. No auth needed; the catalog is public.
+// Returns [{ id, name }] sorted by name.
+export async function fetchImageModels() {
+  const res = await fetch(MODELS_URL);
+  if (!res.ok) throw new Error(`Could not load models (HTTP ${res.status}).`);
+  const data = await res.json();
+  return (data?.data ?? [])
+    .filter((m) => {
+      const a = m.architecture ?? {};
+      return (
+        (a.output_modalities ?? []).includes("image") &&
+        (a.input_modalities ?? []).includes("image")
+      );
+    })
+    .map((m) => ({
+      id: m.id,
+      name: m.name || m.id,
+      // $ per token; output (completion) price is what drives image cost.
+      pricing: {
+        prompt: parseFloat(m.pricing?.prompt ?? "0") || 0,
+        completion: parseFloat(m.pricing?.completion ?? "0") || 0,
+      },
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 function base64url(bytes) {
   let binary = "";

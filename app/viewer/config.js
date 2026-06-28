@@ -51,6 +51,19 @@ export const AI_IMAGE = {
   CAPTURE_MAX: 1280, // px, longest edge of the captured selection
   SKY_COLOR: 0x9fc4e8, // capture backdrop: soft sky blue
   GROUND_COLOR: 0x7e8b63, // capture ground plane: muted grass/olive
+
+  // Quality is a hand-maintained judgement (OpenRouter has no quality signal),
+  // shown as a tag in the model picker. Keyed by a substring of the model id;
+  // first match wins, so list more specific ids first. tier drives the color.
+  // The cost tag, by contrast, is computed live from each model's output price.
+  MODEL_QUALITY: [
+    { match: "gemini-3-pro-image", tier: "top", label: "Top" },
+    { match: "gpt-5.4-image", tier: "top", label: "Top" },
+    { match: "gpt-5-image-mini", tier: "good", label: "Good" },
+    { match: "gpt-5-image", tier: "high", label: "High" },
+    { match: "gemini-3.1-flash-image", tier: "high", label: "High" },
+    { match: "gemini-2.5-flash-image", tier: "high", label: "High" },
+  ],
 };
 
 // can mess with material scaling here,

@@ -260,6 +260,102 @@ body.viewer-active {
   outline: none;
   border-color: #888;
 }
+
+/* Custom model dropdown with cost/quality tags. */
+.ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-field-label {
+  font-size: 13px;
+  color: #ccc;
+}
+.ai-model {
+  position: relative;
+}
+.ai-model-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 8px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.ai-model-trigger:hover { border-color: #888; }
+#ai-model-current {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-model-caret { color: #888; flex: 0 0 auto; }
+.ai-model-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.ai-model-list.hidden { display: none; }
+.ai-model-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #333;
+  color: #eee;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.ai-model-option:last-child { border-bottom: none; }
+.ai-model-option:hover { background: #2e2e2e; }
+.ai-model-option.active { background: rgba(47, 111, 79, 0.22); }
+.ai-model-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-model-tags {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+}
+.ai-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.ai-tag-cost.ai-tag-low { background: rgba(47, 111, 79, 0.28); color: #8fd0ac; }
+.ai-tag-cost.ai-tag-mid { background: rgba(176, 140, 40, 0.24); color: #e3cd86; }
+.ai-tag-cost.ai-tag-high { background: rgba(180, 60, 70, 0.28); color: #ff9aa6; }
+.ai-tag-quality.ai-tag-top { background: rgba(60, 120, 180, 0.3); color: #a9d4ff; }
+.ai-tag-quality.ai-tag-high { background: rgba(60, 120, 180, 0.18); color: #9cc7ef; }
+.ai-tag-quality.ai-tag-good { background: rgba(120, 120, 120, 0.26); color: #cfcfcf; }
+.ai-tag-quality.ai-tag-unknown { background: rgba(120, 120, 120, 0.18); color: #999; }
 .ai-note {
   margin: 8px 0 0;
   font-size: 11px;
