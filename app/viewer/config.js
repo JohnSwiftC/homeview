@@ -1,6 +1,5 @@
-export const MODELS = [
-  { id: "mvphome", label: "mvphome", url: "/models/mvphome.glb" },
-];
+// The model list is generated from public/models by `npm run compress:models`.
+export { MODELS } from "./models.generated.js";
 
 export const PAINT_MATERIAL_NAME = "MainPaint";
 export const PAINT_COLORS = [
@@ -70,8 +69,11 @@ export const AI_IMAGE = {
 // in a model, pick the default material for a group,
 // set the default group UV, and if needed, you can also
 // go into the individual swatches
+//
+// `default` applies to every model; add a model id (as it appears in
+// models.generated.js) to override the scaling for that one plan.
 export const TEXTURE_SCALES = {
-  mvphome: {
+  default: {
     RusticStone: { group: [0.2, 0.2], swatches: {} },
   },
 };

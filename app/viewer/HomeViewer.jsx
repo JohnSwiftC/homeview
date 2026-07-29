@@ -37,10 +37,7 @@ export default function HomeViewer() {
   return (
     <>
       <div id="ui">
-        <label>
-          Model
-          <select id="model-select"></select>
-        </label>
+        <div id="model-container"></div>
         <div id="paint-container"></div>
         <div id="material-groups"></div>
         <button id="copy-link" type="button">

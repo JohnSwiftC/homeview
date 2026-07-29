@@ -24,7 +24,7 @@ import {
 // UI shell has mounted; returns a cleanup that tears the scene down again.
 export default function initViewer() {
   const canvas = document.getElementById("viewport");
-  const modelSelect = document.getElementById("model-select");
+  const modelContainer = document.getElementById("model-container");
   const groupsContainer = document.getElementById("material-groups");
   const paintContainer = document.getElementById("paint-container");
   const copyLinkBtn = document.getElementById("copy-link");
@@ -63,7 +63,9 @@ export default function initViewer() {
   }
   document.addEventListener("keydown", onKeyDown);
 
-  // items: [{ value, label }]; previewFor(item, size) -> HTMLElement (fresh each call)
+  // items: [{ value, label }]; previewFor(item, size) -> HTMLElement (fresh each
+  // call). previewFor is optional: omit it for lists with nothing to show but a
+  // name (the models), and the tiles/trigger render as text only.
   function createSelector({
     key,
     label,
@@ -90,7 +92,8 @@ export default function initViewer() {
     triggerPreview.className = "selector-preview";
     const triggerText = document.createElement("span");
     triggerText.className = "selector-text";
-    trigger.appendChild(triggerPreview);
+    if (previewFor) trigger.appendChild(triggerPreview);
+    else trigger.classList.add("text-only");
     trigger.appendChild(triggerText);
     wrapper.appendChild(trigger);
 
@@ -113,7 +116,7 @@ export default function initViewer() {
     closeBtn.setAttribute("aria-label", "Close");
     closeBtn.textContent = "×";
     const grid = document.createElement("div");
-    grid.className = "modal-grid";
+    grid.className = previewFor ? "modal-grid" : "modal-grid text-only";
     header.appendChild(title);
     header.appendChild(closeBtn);
     const search = document.createElement("input");
@@ -138,15 +141,16 @@ export default function initViewer() {
       tile.className = "tile";
       tile.dataset.value = item.value;
 
-      const previewBox = document.createElement("div");
-      previewBox.className = "tile-preview";
-      previewBox.appendChild(previewFor(item, 256));
+      if (previewFor) {
+        const previewBox = document.createElement("div");
+        previewBox.className = "tile-preview";
+        previewBox.appendChild(previewFor(item, 256));
+        tile.appendChild(previewBox);
+      }
 
       const tileLabel = document.createElement("div");
       tileLabel.className = "tile-label";
       tileLabel.textContent = item.label;
-
-      tile.appendChild(previewBox);
       tile.appendChild(tileLabel);
       tile.addEventListener("click", () => {
         setValue(item.value, true);
@@ -169,8 +173,10 @@ export default function initViewer() {
       const item = items.find((i) => i.value === value) ?? items[0];
       if (!item) return;
       wrapper.dataset.value = item.value;
-      triggerPreview.innerHTML = "";
-      triggerPreview.appendChild(previewFor(item, 24));
+      if (previewFor) {
+        triggerPreview.innerHTML = "";
+        triggerPreview.appendChild(previewFor(item, 24));
+      }
       triggerText.textContent = item.label;
       for (const [v, tile] of tilesByValue)
         tile.classList.toggle("active", v === item.value);
@@ -261,16 +267,6 @@ export default function initViewer() {
   let currentModel = null;
   let paintMaterials = []; // all unique material instances named MainPaint on the current model
   const swatchFileCache = new Map(); // url -> Promise<Material[]>
-
-  function populateSelect(select, items) {
-    select.innerHTML = "";
-    for (const item of items) {
-      const opt = document.createElement("option");
-      opt.value = item.id;
-      opt.textContent = item.label;
-      select.appendChild(opt);
-    }
-  }
 
   function frameObject(object) {
     const box = new THREE.Box3().setFromObject(object);
@@ -548,7 +544,10 @@ export default function initViewer() {
       const excluded = new Set([PAINT_MATERIAL_NAME, ...IGNORED_MATERIALS]);
       const groups = collectMaterialGroups(currentModel, excluded);
       const swatchesByGroup = await loadSwatchesForGroups(groups);
-      const modelScales = TEXTURE_SCALES[modelDef.id] ?? {};
+      const modelScales = {
+        ...TEXTURE_SCALES.default,
+        ...TEXTURE_SCALES[modelDef.id],
+      };
       buildGroupUI(groups, swatchesByGroup, modelScales);
 
       if (!appliedInitialGroupParams) {
@@ -578,7 +577,8 @@ export default function initViewer() {
 
   function updateUrlFromState() {
     const params = new URLSearchParams();
-    if (modelSelect.value) params.set("model", modelSelect.value);
+    // The model picker is itself a .selector (state key "model"), so the loop
+    // below covers it along with paint and the material groups.
     for (const sel of document.querySelectorAll(".selector[data-state-key]")) {
       const val = sel.dataset.value;
       if (val && val !== "__default__") params.set(sel.dataset.stateKey, val);
@@ -601,8 +601,6 @@ export default function initViewer() {
       if (tile) tile.click();
     }
   }
-
-  populateSelect(modelSelect, MODELS);
 
   const initialParams = new URLSearchParams(window.location.search);
   const initialPaintId = initialParams.get("paint");
@@ -631,11 +629,22 @@ export default function initViewer() {
   });
   paintContainer.appendChild(paintSelector.element);
 
-  function onModelChange() {
-    const def = MODELS.find((m) => m.id === modelSelect.value);
-    if (def) loadModel(def);
+  // Built after the paint selector but inserted above it in the DOM, since the
+  // model is the top-level choice. Text-only tiles: there is nothing to preview
+  // for a model beyond its plan number and elevation style.
+  if (startModel) {
+    const modelSelector = createSelector({
+      key: "model",
+      label: "Model",
+      items: MODELS.map((m) => ({ value: m.id, label: m.label })),
+      initialValue: startModel.id,
+      onChange: (value) => {
+        const def = MODELS.find((m) => m.id === value);
+        if (def) loadModel(def);
+      },
+    });
+    modelContainer.appendChild(modelSelector.element);
   }
-  modelSelect.addEventListener("change", onModelChange);
 
   async function onCopyLink() {
     const original = copyLinkBtn.textContent;
@@ -652,10 +661,10 @@ export default function initViewer() {
   copyLinkBtn.addEventListener("click", onCopyLink);
 
   if (startModel) {
-    modelSelect.value = startModel.id;
     loadModel(startModel);
   } else {
-    status.textContent = "No models configured. Add entries to config.js.";
+    status.textContent =
+      "No models found. Run `npm run compress:models` to build public/models.";
   }
 
   // --- AI Render (OpenRouter OAuth, billed to the user) -----------------
@@ -1134,7 +1143,6 @@ export default function initViewer() {
     cancelAnimationFrame(rafId);
     window.removeEventListener("resize", onResize);
     document.removeEventListener("keydown", onKeyDown);
-    modelSelect.removeEventListener("change", onModelChange);
     copyLinkBtn.removeEventListener("click", onCopyLink);
     aiOpenBtn.removeEventListener("click", openAiModal);
     aiCloseBtn.removeEventListener("click", closeAiModal);
