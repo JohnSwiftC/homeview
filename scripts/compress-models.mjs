@@ -154,17 +154,40 @@ await Promise.all(
 );
 if (skipped) console.log(`${skipped} already up to date (use --force to redo)`);
 
-// "129-1105-dm-farmhouse" -> "129-1105 — Farmhouse". The plan number stays
-// verbatim so it stays searchable in the picker; the elevation style is
-// title-cased for display.
-function labelFor(id) {
-  const match = /^(\d+-\d+)-dm-(.+)$/.exec(id);
-  const [plan, style] = match ? [match[1], match[2]] : [null, id];
+// Marketing plan names, keyed by the square footage in the plan number
+// ("129-1105" -> 1105 -> Magnolia). Plans without a name here just don't get
+// one in the picker.
+const PLAN_NAMES = {
+  1105: "Magnolia",
+  1335: "Cypress",
+  1360: "Willow",
+  1526: "Logan",
+  1569: "Hamilton",
+  1584: "Gilmore",
+  1664: "Linden",
+  1697: "Fairfield 2",
+  1851: "Brighton",
+  1994: "Hazel",
+  2214: "Carson",
+  2402: "Danbury",
+};
+
+// "129-1105-dm-farmhouse" -> { label: "129-1105 — Farmhouse", name: "Magnolia" }.
+// The plan number stays verbatim so it stays searchable in the picker; the
+// elevation style is title-cased for display.
+function describe(id) {
+  const match = /^(\d+)-(\d+)-dm-(.+)$/.exec(id);
+  const [plan, sqft, style] = match
+    ? [`${match[1]}-${match[2]}`, match[2], match[3]]
+    : [null, null, id];
   const pretty = style
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-  return plan ? `${plan} — ${pretty}` : pretty;
+  return {
+    label: plan ? `${plan} — ${pretty}` : pretty,
+    name: PLAN_NAMES[sqft] ?? null,
+  };
 }
 
 // The picker list is rebuilt from what is actually sitting in public/models,
@@ -182,9 +205,12 @@ function writeManifest() {
 
   const entries = files.map((file) => {
     const id = path.basename(file, ".glb");
-    return `  { id: ${JSON.stringify(id)}, label: ${JSON.stringify(
-      labelFor(id),
-    )}, url: ${JSON.stringify(`/models/${file}`)} },`;
+    const { label, name } = describe(id);
+    return (
+      `  { id: ${JSON.stringify(id)}, label: ${JSON.stringify(label)}` +
+      (name ? `, name: ${JSON.stringify(name)}` : "") +
+      `, url: ${JSON.stringify(`/models/${file}`)} },`
+    );
   });
 
   const body =

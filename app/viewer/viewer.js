@@ -63,9 +63,10 @@ export default function initViewer() {
   }
   document.addEventListener("keydown", onKeyDown);
 
-  // items: [{ value, label }]; previewFor(item, size) -> HTMLElement (fresh each
-  // call). previewFor is optional: omit it for lists with nothing to show but a
-  // name (the models), and the tiles/trigger render as text only.
+  // items: [{ value, label, subtitle? }]; previewFor(item, size) -> HTMLElement
+  // (fresh each call). previewFor is optional: omit it for lists with nothing to
+  // show but a name (the models), and the tiles/trigger render as text only.
+  // subtitle is shown under the tile label and is matched by the search box.
   function createSelector({
     key,
     label,
@@ -134,7 +135,7 @@ export default function initViewer() {
     closeBtn.addEventListener("click", closeActiveModal);
 
     const tilesByValue = new Map();
-    const tileEntries = []; // { tile, label } for name filtering
+    const tileEntries = []; // { tile, text } for name/subtitle filtering
     for (const item of items) {
       const tile = document.createElement("button");
       tile.type = "button";
@@ -151,6 +152,12 @@ export default function initViewer() {
       const tileLabel = document.createElement("div");
       tileLabel.className = "tile-label";
       tileLabel.textContent = item.label;
+      if (item.subtitle) {
+        const sub = document.createElement("span");
+        sub.className = "tile-subtitle";
+        sub.textContent = item.subtitle;
+        tileLabel.appendChild(sub);
+      }
       tile.appendChild(tileLabel);
       tile.addEventListener("click", () => {
         setValue(item.value, true);
@@ -158,14 +165,17 @@ export default function initViewer() {
       });
       grid.appendChild(tile);
       tilesByValue.set(item.value, tile);
-      tileEntries.push({ tile, label: (item.label ?? "").toLowerCase() });
+      tileEntries.push({
+        tile,
+        text: `${item.label ?? ""} ${item.subtitle ?? ""}`.toLowerCase(),
+      });
     }
 
     // Filter tiles by name as the user types.
     function applyFilter() {
       const q = search.value.trim().toLowerCase();
-      for (const { tile, label } of tileEntries)
-        tile.classList.toggle("filtered-out", q !== "" && !label.includes(q));
+      for (const { tile, text } of tileEntries)
+        tile.classList.toggle("filtered-out", q !== "" && !text.includes(q));
     }
     search.addEventListener("input", applyFilter);
 
@@ -636,7 +646,11 @@ export default function initViewer() {
     const modelSelector = createSelector({
       key: "model",
       label: "Model",
-      items: MODELS.map((m) => ({ value: m.id, label: m.label })),
+      items: MODELS.map((m) => ({
+        value: m.id,
+        label: m.label,
+        subtitle: m.name,
+      })),
       initialValue: startModel.id,
       onChange: (value) => {
         const def = MODELS.find((m) => m.id === value);
